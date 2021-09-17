@@ -19,3 +19,7 @@ out/
 .idea/
 # CLion build directories
 cmake-build-*/
+
+Bootstrap.cmk
+_esy
+node_modules
