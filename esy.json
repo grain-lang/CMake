@@ -12,7 +12,7 @@
             "CXXFLAGS": "#{os == 'windows' ? '--std c++11' : ''}",
             "CFLAGS": "",
             "PATH": "#{os == 'windows' ? '/usr/x86_64-w64-mingw32/sys-root/mingw/bin' : '' : $PATH }",
-            "LDFLAGS": "-static-libstdc++ -static-libgcc -static",
+            "LDFLAGS": "#{os == 'windows' ? '-static-libstdc++ -static-libgcc -static' : ''}",
             "MAKE": "make",
             "CMAKE_C_SOURCES": "",
             "cmake_ansi_cxx_flags": ""
