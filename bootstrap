@@ -53,7 +53,8 @@ cmake_toupper()
 cmake_system=`uname`
 cmake_source_dir=`cd "\`dirname \"$0\"\`";pwd`
 cmake_binary_dir=`pwd`
-if ${cmake_system_cygwin}; then
+
+if ${UNAME_OVERRIDE}; then
   cmake_binary_dir="$(cygpath -m "${cmake_binary_dir}")"
   cmake_source_dir="$(cygpath -m "${cmake_source_dir}")"
 fi
@@ -489,7 +490,7 @@ CMAKE_CXX_SOURCES="\
   cmcmd  \
 "
 
-if ${cmake_system_mingw} || ${cmake_system_cygwin}; then
+if ${cmake_system_mingw} || ${UNAME_OVERRIDE}; then
   CMAKE_CXX_SOURCES="${CMAKE_CXX_SOURCES}\
     cmGlobalMSYSMakefileGenerator \
     cmGlobalMinGWMakefileGenerator \
@@ -522,7 +523,7 @@ LexerParser_C_SOURCES="\
   cmListFileLexer \
 "
 
-if ${cmake_system_mingw} || ${cmake_system_cygwin}; then
+if ${cmake_system_mingw} || ${UNAME_OVERRIDE}; then
   KWSYS_C_SOURCES="\
     EncodingC \
     ProcessWin32 \
@@ -574,7 +575,7 @@ LIBRHASH_C_SOURCES="\
   librhash/sha512.c \
   "
 
-if ${cmake_system_mingw} || ${cmake_system_cygwin}; then
+if ${cmake_system_mingw} || ${UNAME_OVERRIDE}; then
   LIBUV_C_SOURCES="\
     src/fs-poll.c \
     src/idna.c
@@ -1596,7 +1597,7 @@ else
   cmake_report cmConfigure.h${_tmp} "#define CMAKE_BOOTSTRAP_MAKEFILES"
 fi
 
-if ${cmake_system_mingw} || ${cmake_system_cygwin}; then
+if ${cmake_system_mingw} || ${UNAME_OVERRIDE}; then
   cmake_report cmConfigure.h${_tmp} "#if defined(_WIN32) && !defined(NOMINMAX)"
   cmake_report cmConfigure.h${_tmp} "#  define NOMINMAX"
   cmake_report cmConfigure.h${_tmp} "#endif"
@@ -1676,7 +1677,7 @@ fi
 libs=""
 
 uv_c_flags=""
-if ${cmake_system_mingw} || ${cmake_system_cygwin}; then
+if ${cmake_system_mingw} || ${UNAME_OVERRIDE}; then
   uv_c_flags="${uv_c_flags} -DWIN32_LEAN_AND_MEAN -D_WIN32_WINNT=0x0600"
   libs="${libs} -lws2_32 -lpsapi -liphlpapi -lshell32 -luserenv -lole32 -loleaut32"
 else
@@ -1715,7 +1716,7 @@ else
 fi
 if test "x${bootstrap_system_libuv}" = "x"; then
   uv_c_flags="${uv_c_flags} `cmake_escape_shell "-I${cmake_source_dir}/Utilities/cmlibuv/include"`"
-  if ${cmake_system_mingw} || ${cmake_system_cygwin}; then
+  if ${cmake_system_mingw} || ${UNAME_OVERRIDE}; then
     uv_c_flags="${uv_c_flags} `cmake_escape_shell "-I${cmake_source_dir}/Utilities/cmlibuv/src/win"`"
   else
     uv_c_flags="${uv_c_flags} `cmake_escape_shell "-I${cmake_source_dir}/Utilities/cmlibuv/src/unix"`"
@@ -1800,7 +1801,7 @@ write_source_rule() {
 }
 
 cmake_c_flags_String="-DKWSYS_STRING_C"
-if ${cmake_system_mingw} || ${cmake_system_cygwin}; then
+if ${cmake_system_mingw} || ${UNAME_OVERRIDE}; then
   cmake_c_flags_EncodingC="-DKWSYS_ENCODING_DEFAULT_CODEPAGE=CP_ACP"
   cmake_cxx_flags_EncodingCXX="${cmake_c_flags_EncodingC}"
   cmake_cxx_flags_cmProcessOutput="${cmake_c_flags_EncodingC}"
