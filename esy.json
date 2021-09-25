@@ -10,7 +10,12 @@
             "CC": "#{os == 'windows' ? 'x86_64-w64-mingw32-gcc' : ''}",
             "CXX": "#{os == 'windows' ? 'x86_64-w64-mingw32-g++' : ''}",
             "CXXFLAGS": "#{os == 'windows' ? '--std c++11' : ''}",
-            "PATH": "#{os == 'windows' ? '/usr/x86_64-w64-mingw32/sys-root/mingw/bin' : '' : $PATH }"
+            "CFLAGS": "",
+            "PATH": "#{os == 'windows' ? '/usr/x86_64-w64-mingw32/sys-root/mingw/bin' : '' : $PATH }",
+            "LDFLAGS": "#{os == 'windows' ? '-static-libstdc++ -static-libgcc -static' : ''}",
+            "MAKE": "make",
+            "CMAKE_C_SOURCES": "",
+            "cmake_ansi_cxx_flags": ""
         },
         "build": [
             "./bootstrap --verbose --parallel=4 --prefix=#{self.install}",
