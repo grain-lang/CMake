@@ -1,6 +1,9 @@
 CMP0027
 -------
 
+.. |REMOVED_IN_CMAKE_VERSION| replace:: 4.0
+.. include:: include/REMOVED_PROLOGUE.rst
+
 Conditionally linked imported targets with missing include directories.
 
 CMake 2.8.11 introduced introduced the concept of
@@ -20,8 +23,6 @@ The ``NEW`` behavior of this policy is to report an error if an entry in
 the :prop_tgt:`INTERFACE_INCLUDE_DIRECTORIES` of a generator-expression
 conditionally linked ``IMPORTED`` target does not exist.
 
-This policy was introduced in CMake version 3.0.  CMake version
-|release| warns when the policy is not set and uses ``OLD`` behavior.  Use
-the :command:`cmake_policy` command to set it to ``OLD`` or ``NEW`` explicitly.
-
-.. include:: DEPRECATED.txt
+.. |INTRODUCED_IN_CMAKE_VERSION| replace:: 3.0
+.. |WARNED_OR_DID_NOT_WARN| replace:: warned
+.. include:: include/REMOVED_EPILOGUE.rst

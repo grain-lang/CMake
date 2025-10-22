@@ -1,4 +1,3 @@
-cmake_policy(SET CMP0057 NEW)
 include(RunCMake)
 
 function(run_test name)
@@ -12,6 +11,7 @@ endfunction()
 run_cmake(DisabledPch)
 run_cmake(PchDebugGenex)
 run_test(PchInterface)
+run_test(PchInterfaceUnity)
 run_cmake(PchPrologueEpilogue)
 run_test(SkipPrecompileHeaders)
 run_test(CXXnotC)

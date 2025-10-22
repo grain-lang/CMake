@@ -1,5 +1,5 @@
 /* Distributed under the OSI-approved BSD 3-Clause License.  See accompanying
-   file Copyright.txt or https://cmake.org/licensing for details.  */
+   file LICENSE.rst or https://cmake.org/licensing for details.  */
 #include "cmLinkItemGraphVisitor.h"
 
 #include <map>
@@ -24,7 +24,7 @@ void cmLinkItemGraphVisitor::VisitItem(cmLinkItem const& item)
 void cmLinkItemGraphVisitor::VisitLinks(cmLinkItem const& item,
                                         cmLinkItem const& rootItem)
 {
-  if (item.Target == nullptr) {
+  if (!item.Target) {
     return;
   }
 
@@ -82,7 +82,7 @@ bool cmLinkItemGraphVisitor::ItemVisited(cmLinkItem const& item)
 bool cmLinkItemGraphVisitor::LinkVisited(cmLinkItem const& depender,
                                          cmLinkItem const& dependee)
 {
-  auto const link = std::make_pair<>(depender.AsStr(), dependee.AsStr());
+  auto const link = std::make_pair(depender.AsStr(), dependee.AsStr());
 
   bool const linkVisited =
     this->VisitedLinks.find(link) != this->VisitedLinks.cend();
@@ -98,18 +98,18 @@ void cmLinkItemGraphVisitor::GetDependencies(cmGeneratorTarget const& target,
                                              std::string const& config,
                                              DependencyMap& dependencies)
 {
-  const auto* implementationLibraries = target.GetLinkImplementationLibraries(
-    config, cmGeneratorTarget::LinkInterfaceFor::Link);
-  if (implementationLibraries != nullptr) {
+  auto const* implementationLibraries = target.GetLinkImplementationLibraries(
+    config, cmGeneratorTarget::UseTo::Link);
+  if (implementationLibraries) {
     for (auto const& lib : implementationLibraries->Libraries) {
       auto const& name = lib.AsStr();
       dependencies[name] = Dependency(DependencyType::LinkPrivate, lib);
     }
   }
 
-  const auto* interfaceLibraries = target.GetLinkInterfaceLibraries(
-    config, &target, cmGeneratorTarget::LinkInterfaceFor::Usage);
-  if (interfaceLibraries != nullptr) {
+  auto const* interfaceLibraries = target.GetLinkInterfaceLibraries(
+    config, &target, cmGeneratorTarget::UseTo::Compile);
+  if (interfaceLibraries) {
     for (auto const& lib : interfaceLibraries->Libraries) {
       auto const& name = lib.AsStr();
       if (dependencies.find(name) != dependencies.cend()) {
@@ -121,7 +121,7 @@ void cmLinkItemGraphVisitor::GetDependencies(cmGeneratorTarget const& target,
   }
 
   std::vector<cmGeneratorTarget*> objectLibraries;
-  target.GetObjectLibrariesCMP0026(objectLibraries);
+  target.GetObjectLibrariesInSources(objectLibraries);
   for (auto const& lib : objectLibraries) {
     auto const& name = lib->GetName();
     if (dependencies.find(name) == dependencies.cend()) {

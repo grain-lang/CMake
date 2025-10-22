@@ -165,6 +165,7 @@ if(CMAKE_SYSTEM_NAME MATCHES "CYGWIN" OR CMAKE_SYSTEM_NAME MATCHES "MSYS")
     include/uv/posix.h
     )
   list(APPEND uv_defines
+    _GNU_SOURCE
     )
   list(APPEND uv_sources
     src/unix/cygwin.c
@@ -218,24 +219,6 @@ endif()
 
 if(CMAKE_SYSTEM_NAME STREQUAL "FreeBSD")
   list(APPEND uv_libraries
-    kvm
-    )
-  list(APPEND uv_headers
-    include/uv/bsd.h
-    )
-  list(APPEND uv_sources
-    src/unix/bsd-ifaddrs.c
-    src/unix/bsd-proctitle.c
-    src/unix/freebsd.c
-    src/unix/kqueue.c
-    src/unix/posix-hrtime.c
-    )
-endif()
-
-if(CMAKE_SYSTEM_NAME STREQUAL "kFreeBSD")
-  list(APPEND uv_libraries
-    freebsd-glue
-    kvm
     )
   list(APPEND uv_headers
     include/uv/bsd.h
@@ -267,7 +250,6 @@ endif()
 
 if(CMAKE_SYSTEM_NAME STREQUAL "OpenBSD")
   list(APPEND uv_libraries
-    kvm
     )
   list(APPEND uv_headers
     include/uv/bsd.h
@@ -294,27 +276,16 @@ if(CMAKE_SYSTEM_NAME STREQUAL "SunOS")
     )
   list(APPEND uv_defines
     __EXTENSIONS__
+    _XOPEN_SOURCE=600
     )
+  if(NOT CMAKE_C_STANDARD OR CMAKE_C_STANDARD EQUAL 90)
+    set(CMAKE_C_STANDARD 11)
+  endif()
   if(CMAKE_SYSTEM_VERSION STREQUAL "5.10")
-    set(CMAKE_C_STANDARD 90)
-    if(CMAKE_VERSION VERSION_LESS 3.8.20170504 AND CMAKE_C_COMPILER_ID STREQUAL "SunPro" AND NOT CMAKE_C_COMPILER_VERSION VERSION_LESS 5.14)
-      # The running version of CMake does not know how to add this flag.
-      set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -std=c90")
+    list(APPEND uv_defines SUNOS_NO_IFADDRS)
+    if(CMAKE_SYSTEM_PROCESSOR MATCHES "^(i386|x86_64)$")
+      list(APPEND uv_defines CMAKE_NO_MKDTEMP)
     endif()
-    list(APPEND uv_defines
-      _XOPEN_SOURCE=500
-      )
-  else()
-    if(NOT CMAKE_C_STANDARD OR CMAKE_C_STANDARD EQUAL 90)
-      set(CMAKE_C_STANDARD 11)
-    endif()
-    if(CMAKE_VERSION VERSION_LESS 3.8.20170505 AND CMAKE_C_COMPILER_ID STREQUAL "SunPro" AND CMAKE_C_COMPILER_VERSION VERSION_LESS 5.14)
-      # The running version of CMake does not know how to add this flag.
-      set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -xc99")
-    endif()
-    list(APPEND uv_defines
-      _XOPEN_SOURCE=600
-      )
   endif()
   list(APPEND uv_sources
     src/unix/no-proctitle.c
@@ -331,6 +302,7 @@ if(CMAKE_SYSTEM_NAME STREQUAL "HP-UX")
     )
   list(APPEND uv_defines
     _XOPEN_SOURCE_EXTENDED
+    CMAKE_NO_MKDTEMP
     )
   list(APPEND uv_sources
     src/unix/hpux.c
@@ -364,5 +336,9 @@ include_directories(
 add_library(cmlibuv STATIC ${uv_sources})
 target_link_libraries(cmlibuv ${uv_libraries})
 set_property(TARGET cmlibuv PROPERTY COMPILE_DEFINITIONS ${uv_defines})
+
+if(WIN32 AND CMake_BUILD_PCH)
+  target_precompile_headers(cmlibuv PRIVATE "include/uv.h" "src/win/internal.h")
+endif()
 
 install(FILES LICENSE DESTINATION ${CMAKE_DOC_DIR}/cmlibuv)

@@ -1,5 +1,5 @@
 /* Distributed under the OSI-approved BSD 3-Clause License.  See accompanying
-   file Copyright.txt or https://cmake.org/licensing for details.  */
+   file LICENSE.rst or https://cmake.org/licensing for details.  */
 #pragma once
 
 #include "cmConfigure.h" // IWYU pragma: keep
@@ -10,6 +10,7 @@
 #include <unordered_map>
 #include <vector>
 
+#include <cm/optional>
 #include <cmext/algorithm>
 
 #include "cmListFileCache.h"
@@ -17,6 +18,7 @@
 #include "cmTargetLinkLibraryType.h"
 
 class cmGeneratorTarget;
+class cmSourceFile;
 
 // Basic information about each link item.
 class cmLinkItem
@@ -24,11 +26,20 @@ class cmLinkItem
   std::string String;
 
 public:
-  cmLinkItem();
-  cmLinkItem(std::string s, bool c, cmListFileBacktrace bt);
-  cmLinkItem(cmGeneratorTarget const* t, bool c, cmListFileBacktrace bt);
+  // default feature: link library without decoration
+  static std::string const DEFAULT;
+
+  cmLinkItem() = default;
+  cmLinkItem(std::string s, bool c, cmListFileBacktrace bt,
+             std::string feature = DEFAULT);
+  cmLinkItem(cmGeneratorTarget const* t, bool c, cmListFileBacktrace bt,
+             std::string feature = DEFAULT);
   std::string const& AsStr() const;
   cmGeneratorTarget const* Target = nullptr;
+  // The source file representing the external object (used when linking
+  // `$<TARGET_OBJECTS>`)
+  cmSourceFile const* ObjectSource = nullptr;
+  std::string Feature;
   bool Cross = false;
   cmListFileBacktrace Backtrace;
   friend bool operator<(cmLinkItem const& l, cmLinkItem const& r);
@@ -39,9 +50,8 @@ public:
 class cmLinkImplItem : public cmLinkItem
 {
 public:
-  cmLinkImplItem();
-  cmLinkImplItem(cmLinkItem item, bool checkCMP0027);
-  bool CheckCMP0027 = false;
+  cmLinkImplItem() = default;
+  cmLinkImplItem(cmLinkItem item);
 };
 
 /** The link implementation specifies the direct library
@@ -53,10 +63,6 @@ struct cmLinkImplementationLibraries
 
   // Object files linked directly in this configuration.
   std::vector<cmLinkItem> Objects;
-
-  // Libraries linked directly in other configurations.
-  // Needed only for OLD behavior of CMP0003.
-  std::vector<cmLinkItem> WrongConfigLibraries;
 
   // Whether the list depends on a genex referencing the configuration.
   bool HadContextSensitiveCondition = false;
@@ -97,12 +103,6 @@ struct cmLinkInterface : public cmLinkInterfaceLibraries
   // or more static libraries.
   unsigned int Multiplicity = 0;
 
-  // Libraries listed for other configurations.
-  // Needed only for OLD behavior of CMP0003.
-  std::vector<cmLinkItem> WrongConfigLibraries;
-
-  bool ImplementationIsInterface = false;
-
   // Whether the list depends on a link language genex.
   bool HadLinkLanguageSensitiveCondition = false;
 };
@@ -112,7 +112,7 @@ struct cmOptionalLinkInterface : public cmLinkInterface
   bool LibrariesDone = false;
   bool AllDone = false;
   bool Exists = false;
-  bool Explicit = false;
+  bool CheckLinkLibraries = false;
 };
 
 struct cmHeadToLinkInterfaceMap
@@ -137,11 +137,12 @@ struct cmOptionalLinkImplementation : public cmLinkImplementation
   bool LibrariesDone = false;
   bool LanguagesDone = false;
   bool HadHeadSensitiveCondition = false;
+  bool CheckLinkLibraries = false;
 };
 
 /** Compute the link type to use for the given configuration.  */
-inline cmTargetLinkLibraryType CMP0003_ComputeLinkType(
-  const std::string& config, std::vector<std::string> const& debugConfigs)
+inline cmTargetLinkLibraryType ComputeLinkType(
+  std::string const& config, std::vector<std::string> const& debugConfigs)
 {
   // No configuration is always optimized.
   if (config.empty()) {
@@ -156,3 +157,6 @@ inline cmTargetLinkLibraryType CMP0003_ComputeLinkType(
   // The current configuration is not a debug configuration.
   return OPTIMIZED_LibraryType;
 }
+
+// Parse LINK_LIBRARY genex markers.
+cm::optional<std::string> ParseLinkFeature(std::string const& item);

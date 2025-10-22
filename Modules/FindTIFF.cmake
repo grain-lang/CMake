@@ -1,72 +1,264 @@
 # Distributed under the OSI-approved BSD 3-Clause License.  See accompanying
-# file Copyright.txt or https://cmake.org/licensing for details.
+# file LICENSE.rst or https://cmake.org/licensing for details.
 
 #[=======================================================================[.rst:
 FindTIFF
 --------
 
-Find the TIFF library (``libtiff``, https://libtiff.gitlab.io/libtiff/).
+Finds the `TIFF library <https://libtiff.gitlab.io/libtiff/>`_ (``libtiff``).
+This module also takes into account the upstream TIFF library's exported CMake
+package configuration, if available.
 
-Optional COMPONENTS
-^^^^^^^^^^^^^^^^^^^
+Components
+^^^^^^^^^^
 
-This module supports the optional component `CXX`, for use with the COMPONENTS
-argument of the :command:`find_package` command. This component has an associated
-imported target, as described below.
+This module supports the following components:
 
-Imported targets
+``CXX``
+  .. versionadded:: 3.19
+
+  Optional component that ensures that the C++ wrapper library (``libtiffxx``)
+  is found.
+
+Components can be specified using the standard syntax:
+
+.. code-block:: cmake
+
+  find_package(TIFF [COMPONENTS <components>...])
+
+Imported Targets
 ^^^^^^^^^^^^^^^^
 
-.. versionadded:: 3.5
-
-This module defines the following :prop_tgt:`IMPORTED` targets:
+This module provides the following :ref:`Imported Targets`:
 
 ``TIFF::TIFF``
-  The TIFF library, if found.
+  .. versionadded:: 3.5
+
+  Target encapsulating the TIFF library usage requirements, available only if
+  the TIFF is found.
 
 ``TIFF::CXX``
   .. versionadded:: 3.19
 
-  The C++ wrapper libtiffxx, if requested by the `COMPONENTS CXX` option,
-  if the compiler is not MSVC (which includes the C++ wrapper in libtiff),
-  and if found.
+  Target encapsulating the usage requirements for the the C++ wrapper library
+  ``libtiffxx``, available only if TIFF is found.  This target provides CXX
+  usage requirements only if the compiler is not MSVC.  It also has the
+  ``TIFF::TIFF`` target linked in to simplify its usage.
 
-Result variables
+Result Variables
 ^^^^^^^^^^^^^^^^
 
-This module will set the following variables in your project:
+This module defines the following variables:
 
 ``TIFF_FOUND``
-  true if the TIFF headers and libraries were found
-``TIFF_INCLUDE_DIR``
-  the directory containing the TIFF headers
-``TIFF_INCLUDE_DIRS``
-  the directory containing the TIFF headers
-``TIFF_LIBRARIES``
-  TIFF libraries to be linked
+  Boolean indicating whether the TIFF is found.
 
-Cache variables
+``TIFF_VERSION_STRING``
+  The version of the TIFF library found.
+
+``TIFF_INCLUDE_DIRS``
+  The directory containing the TIFF headers.
+
+``TIFF_LIBRARIES``
+  TIFF libraries to be linked.
+
+Cache Variables
 ^^^^^^^^^^^^^^^
 
 The following cache variables may also be set:
 
 ``TIFF_INCLUDE_DIR``
-  the directory containing the TIFF headers
-``TIFF_LIBRARY_RELEASE``
-  the path to the TIFF library for release configurations
-``TIFF_LIBRARY_DEBUG``
-  the path to the TIFF library for debug configurations
-``TIFFXX_LIBRARY_RELEASE``
-  the path to the TIFFXX library for release configurations
-``TIFFXX_LIBRARY_DEBUG``
-  the path to the TIFFXX library for debug configurations
+  The directory containing the TIFF headers.
 
-.. versionadded:: 3.4
-  Debug and Release variants are found separately.
+``TIFF_LIBRARY_RELEASE``
+  .. versionadded:: 3.4
+
+  The path to the TIFF library for release configurations.
+
+``TIFF_LIBRARY_DEBUG``
+  .. versionadded:: 3.4
+
+  The path to the TIFF library for debug configurations.
+
+``TIFFXX_LIBRARY_RELEASE``
+  .. versionadded:: 3.19
+
+  The path to the TIFFXX library for release configurations.
+
+``TIFFXX_LIBRARY_DEBUG``
+  .. versionadded:: 3.19
+
+  The path to the TIFFXX library for debug configurations.
+
+Examples
+^^^^^^^^
+
+Finding TIFF library and linking it to a project target:
+
+.. code-block:: cmake
+
+  find_package(TIFF)
+  target_link_libraries(project_target PRIVATE TIFF::TIFF)
+
+Finding TIFF and TIFFXX libraries by specifying the ``CXX`` component:
+
+.. code-block:: cmake
+
+  find_package(TIFF COMPONENTS CXX)
+  target_link_libraries(project_target PRIVATE TIFF::CXX)
 #]=======================================================================]
 
 cmake_policy(PUSH)
-cmake_policy(SET CMP0057 NEW)
+cmake_policy(SET CMP0159 NEW) # file(STRINGS) with REGEX updates CMAKE_MATCH_<n>
+
+set(_TIFF_args)
+if (TIFF_FIND_VERSION)
+  list(APPEND _TIFF_args
+    "${TIFF_FIND_VERSION}")
+  if (TIFF_FIND_VERSION_EXACT)
+    list(APPEND _TIFF_args
+      EXACT)
+  endif ()
+endif ()
+set(_TIFF_component_req)
+set(_TIFF_component_opt)
+foreach (_TIFF_component IN LISTS TIFF_FIND_COMPONENTS)
+  if (TIFF_FIND_REQUIRE_${_TIFF_component})
+    list(APPEND _TIFF_component_req
+      "${_TIFF_component}")
+  else ()
+    list(APPEND _TIFF_component_opt
+      "${_TIFF_component}")
+  endif ()
+endforeach ()
+unset(_TIFF_component)
+if (_TIFF_component_req)
+  list(APPEND _TIFF_args
+    COMPONENTS "${_TIFF_component_req}")
+endif ()
+unset(_TIFF_component_req)
+if (_TIFF_component_opt)
+  list(APPEND _TIFF_args
+    OPTIONAL_COMPONENTS "${_TIFF_component_opt}")
+endif ()
+unset(_TIFF_component_opt)
+# Always find with QUIET to avoid noise when it is not found.
+find_package(Tiff CONFIG QUIET ${_TIFF_args})
+unset(_TIFF_args)
+if (Tiff_FOUND)
+  if (NOT TARGET TIFF::TIFF)
+    add_library(TIFF::TIFF IMPORTED INTERFACE)
+    set_target_properties(TIFF::TIFF PROPERTIES
+      INTERFACE_LINK_LIBRARIES TIFF::tiff)
+  endif ()
+  get_property(TIFF_INCLUDE_DIRS TARGET TIFF::tiff PROPERTY INTERFACE_INCLUDE_DIRECTORIES)
+  get_property(TIFF_LIBRARIES TARGET TIFF::tiff PROPERTY INTERFACE_LINK_LIBRARIES)
+  get_property(_TIFF_location TARGET TIFF::tiff PROPERTY IMPORTED_IMPLIB)
+  if (NOT _TIFF_location)
+    get_property(_TIFF_location_release TARGET TIFF::tiff PROPERTY IMPORTED_IMPLIB_RELEASE)
+    if (NOT _TIFF_location_release)
+      get_property(_TIFF_location_release TARGET TIFF::tiff PROPERTY IMPORTED_IMPLIB_RELWITHDEBINFO)
+    endif ()
+    get_property(_TIFF_location_debug TARGET TIFF::tiff PROPERTY IMPORTED_IMPLIB_DEBUG)
+    if (_TIFF_location_release AND _TIFF_location_debug)
+      set(_TIFF_location
+        optimized "${_TIFF_location_release}"
+        debug "${_TIFF_location_debug}")
+    elseif (_TIFF_location_release)
+      set(_TIFF_location "${_TIFF_location_release}")
+    elseif (_TIFF_location_debug)
+      set(_TIFF_location "${_TIFF_location_debug}")
+    else ()
+      get_property(_TIFF_location_release TARGET TIFF::tiff PROPERTY LOCATION_RELEASE)
+      if (NOT _TIFF_location_release)
+        get_property(_TIFF_location_release TARGET TIFF::tiff PROPERTY LOCATION_RELWITHDEBINFO)
+      endif ()
+      get_property(_TIFF_location_debug TARGET TIFF::tiff PROPERTY LOCATION_DEBUG)
+      if (_TIFF_location_release AND _TIFF_location_debug)
+        set(_TIFF_location
+          optimized "${_TIFF_location_release}"
+          debug "${_TIFF_location_debug}")
+      elseif (_TIFF_location_release)
+        set(_TIFF_location "${_TIFF_location_release}")
+      elseif (_TIFF_location_debug)
+        set(_TIFF_location "${_TIFF_location_debug}")
+      else ()
+        get_property(_TIFF_location TARGET TIFF::tiff PROPERTY LOCATION)
+      endif ()
+    endif ()
+    unset(_TIFF_location_release)
+    unset(_TIFF_location_debug)
+  endif ()
+  list(INSERT TIFF_LIBRARIES 0
+    "${_TIFF_location}")
+  unset(_TIFF_location)
+  set(TIFF_FOUND 1)
+  if("CXX" IN_LIST TIFF_FIND_COMPONENTS)
+    if (TARGET TIFF::CXX)
+      get_property(_TIFF_CXX_location TARGET TIFF::CXX PROPERTY IMPORTED_IMPLIB)
+      if (NOT _TIFF_CXX_location)
+        get_property(_TIFF_CXX_location_release TARGET TIFF::CXX PROPERTY IMPORTED_IMPLIB_RELEASE)
+        if (NOT _TIFF_CXX_location_release)
+          get_property(_TIFF_CXX_location_release TARGET TIFF::CXX PROPERTY IMPORTED_IMPLIB_RELWITHDEBINFO)
+        endif ()
+        get_property(_TIFF_CXX_location_debug TARGET TIFF::CXX PROPERTY IMPORTED_IMPLIB_DEBUG)
+        if (_TIFF_CXX_location_release AND _TIFF_CXX_location_debug)
+          set(_TIFF_CXX_location
+            optimized "${_TIFF_CXX_location_release}"
+            debug "${_TIFF_CXX_location_debug}")
+        elseif (_TIFF_CXX_location_release)
+          set(_TIFF_CXX_location "${_TIFF_CXX_location_release}")
+        elseif (_TIFF_CXX_location_debug)
+          set(_TIFF_CXX_location "${_TIFF_CXX_location_debug}")
+        else ()
+          get_property(_TIFF_CXX_location_release TARGET TIFF::CXX PROPERTY LOCATION_RELEASE)
+          if (NOT _TIFF_CXX_location_release)
+            get_property(_TIFF_CXX_location_release TARGET TIFF::CXX PROPERTY LOCATION_RELWITHDEBINFO)
+          endif ()
+          get_property(_TIFF_CXX_location_debug TARGET TIFF::CXX PROPERTY LOCATION_DEBUG)
+          if (_TIFF_CXX_location_release AND _TIFF_CXX_location_debug)
+            set(_TIFF_CXX_location
+              optimized "${_TIFF_CXX_location_release}"
+              debug "${_TIFF_CXX_location_debug}")
+          elseif (_TIFF_CXX_location_release)
+            set(_TIFF_CXX_location "${_TIFF_CXX_location_release}")
+          elseif (_TIFF_CXX_location_debug)
+            set(_TIFF_CXX_location "${_TIFF_CXX_location_debug}")
+          else ()
+            get_property(_TIFF_CXX_location TARGET TIFF::CXX PROPERTY LOCATION)
+          endif ()
+        endif ()
+        unset(_TIFF_CXX_location_release)
+        unset(_TIFF_CXX_location_debug)
+      endif ()
+      list(INSERT TIFF_LIBRARIES 0
+        "${_TIFF_CXX_location}")
+      unset(_TIFF_CXX_location)
+      set(TIFF_CXX_FOUND 1)
+    else ()
+      set(TIFF_CXX_FOUND 0)
+      if (TIFF_FIND_REQUIRED_CXX)
+        set(TIFF_FOUND 0)
+        list(APPEND TIFF_NOT_FOUND_REASON
+          "No C++ bindings target found")
+      endif ()
+    endif ()
+  endif ()
+  set(TIFF_VERSION_STRING "${Tiff_VERSION}")
+  foreach (_TIFF_component IN LISTS TIFF_FIND_COMPONENTS)
+    set(TIFF_${_TIFF_component}_FOUND "${Tiff_${_TIFF_component}_FOUND}")
+  endforeach ()
+  unset(_TIFF_component)
+
+  include(FindPackageHandleStandardArgs)
+  find_package_handle_standard_args(TIFF
+                                    HANDLE_COMPONENTS
+                                    REQUIRED_VARS Tiff_DIR
+                                    VERSION_VAR TIFF_VERSION_STRING)
+
+  cmake_policy(POP)
+  return ()
+endif ()
 
 find_path(TIFF_INCLUDE_DIR tiff.h)
 
@@ -120,8 +312,8 @@ unset(_comp)
 unset(TIFF_NAMES)
 unset(TIFF_NAMES_DEBUG)
 
-include(${CMAKE_CURRENT_LIST_DIR}/FindPackageHandleStandardArgs.cmake)
-FIND_PACKAGE_HANDLE_STANDARD_ARGS(TIFF
+include(FindPackageHandleStandardArgs)
+find_package_handle_standard_args(TIFF
                                   HANDLE_COMPONENTS
                                   REQUIRED_VARS TIFF_LIBRARY TIFF_INCLUDE_DIR
                                   VERSION_VAR TIFF_VERSION_STRING)

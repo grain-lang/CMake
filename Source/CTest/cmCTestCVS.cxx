@@ -1,22 +1,23 @@
 /* Distributed under the OSI-approved BSD 3-Clause License.  See accompanying
-   file Copyright.txt or https://cmake.org/licensing for details.  */
+   file LICENSE.rst or https://cmake.org/licensing for details.  */
 #include "cmCTestCVS.h"
 
 #include <utility>
 
 #include <cm/string_view>
+#include <cmext/algorithm>
 
 #include "cmsys/FStream.hxx"
 #include "cmsys/RegularExpression.hxx"
 
 #include "cmCTest.h"
-#include "cmProcessTools.h"
+#include "cmMakefile.h"
 #include "cmStringAlgorithms.h"
 #include "cmSystemTools.h"
 #include "cmXMLWriter.h"
 
-cmCTestCVS::cmCTestCVS(cmCTest* ct, std::ostream& log)
-  : cmCTestVC(ct, log)
+cmCTestCVS::cmCTestCVS(cmCTest* ct, cmMakefile* mf, std::ostream& log)
+  : cmCTestVC(ct, mf, log)
 {
 }
 
@@ -25,7 +26,7 @@ cmCTestCVS::~cmCTestCVS() = default;
 class cmCTestCVS::UpdateParser : public cmCTestVC::LineParser
 {
 public:
-  UpdateParser(cmCTestCVS* cvs, const char* prefix)
+  UpdateParser(cmCTestCVS* cvs, char const* prefix)
     : CVS(cvs)
   {
     this->SetLog(&cvs->Log, prefix);
@@ -75,9 +76,9 @@ private:
 bool cmCTestCVS::UpdateImpl()
 {
   // Get user-specified update options.
-  std::string opts = this->CTest->GetCTestConfiguration("UpdateOptions");
+  std::string opts = this->Makefile->GetSafeDefinition("CTEST_UPDATE_OPTIONS");
   if (opts.empty()) {
-    opts = this->CTest->GetCTestConfiguration("CVSUpdateOptions");
+    opts = this->Makefile->GetSafeDefinition("CTEST_CVS_UPDATE_OPTIONS");
     if (opts.empty()) {
       opts = "-dP";
     }
@@ -90,25 +91,22 @@ bool cmCTestCVS::UpdateImpl()
   }
 
   // Run "cvs update" to update the work tree.
-  std::vector<char const*> cvs_update;
-  cvs_update.push_back(this->CommandLineTool.c_str());
-  cvs_update.push_back("-z3");
-  cvs_update.push_back("update");
-  for (std::string const& arg : args) {
-    cvs_update.push_back(arg.c_str());
-  }
-  cvs_update.push_back(nullptr);
+  std::vector<std::string> cvs_update;
+  cvs_update.push_back(this->CommandLineTool);
+  cvs_update.emplace_back("-z3");
+  cvs_update.emplace_back("update");
+  cm::append(cvs_update, args);
 
   UpdateParser out(this, "up-out> ");
   UpdateParser err(this, "up-err> ");
-  return this->RunUpdateCommand(cvs_update.data(), &out, &err);
+  return this->RunUpdateCommand(cvs_update, &out, &err);
 }
 
 class cmCTestCVS::LogParser : public cmCTestVC::LineParser
 {
 public:
   using Revision = cmCTestCVS::Revision;
-  LogParser(cmCTestCVS* cvs, const char* prefix, std::vector<Revision>& revs)
+  LogParser(cmCTestCVS* cvs, char const* prefix, std::vector<Revision>& revs)
     : CVS(cvs)
     , Revisions(revs)
   {
@@ -216,16 +214,14 @@ std::string cmCTestCVS::ComputeBranchFlag(std::string const& dir)
   return "-b";
 }
 
-void cmCTestCVS::LoadRevisions(std::string const& file, const char* branchFlag,
+void cmCTestCVS::LoadRevisions(std::string const& file, char const* branchFlag,
                                std::vector<Revision>& revisions)
 {
   cmCTestLog(this->CTest, HANDLER_OUTPUT, "." << std::flush);
 
   // Run "cvs log" to get revisions of this file on this branch.
-  const char* cvs = this->CommandLineTool.c_str();
-  const char* cvs_log[] = {
-    cvs, "log", "-N", branchFlag, file.c_str(), nullptr
-  };
+  std::string cvs = this->CommandLineTool;
+  std::vector<std::string> cvs_log = { cvs, "log", "-N", branchFlag, file };
 
   LogParser out(this, "log-out> ", revisions);
   OutputLogger err(this->Log, "log-err> ");
@@ -235,7 +231,7 @@ void cmCTestCVS::LoadRevisions(std::string const& file, const char* branchFlag,
 void cmCTestCVS::WriteXMLDirectory(cmXMLWriter& xml, std::string const& path,
                                    Directory const& dir)
 {
-  const char* slash = path.empty() ? "" : "/";
+  char const* slash = path.empty() ? "" : "/";
   xml.StartElement("Directory");
   xml.Element("Name", path);
 

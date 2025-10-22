@@ -1,7 +1,7 @@
 {
   "name": "esy-cmake",
-  "version": "3.27.4",
-  "description": "CMake v3.27.4 packaged for esy",
+  "version": "4.1.2",
+  "description": "CMake v4.1.2 packaged for esy",
   "esy": {
     "buildsInSource": true,
     "buildEnv": {

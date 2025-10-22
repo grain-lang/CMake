@@ -1,5 +1,5 @@
 /* Distributed under the OSI-approved BSD 3-Clause License.  See accompanying
-   file Copyright.txt or https://cmake.org/licensing for details.  */
+   file LICENSE.rst or https://cmake.org/licensing for details.  */
 #include "cmCreateTestSourceList.h"
 
 #include <algorithm>
@@ -22,7 +22,7 @@ bool cmCreateTestSourceList(std::vector<std::string> const& args,
   std::string extraInclude;
   std::string function;
   std::vector<std::string> tests;
-  // extract extra include and function ot
+  // extract extra include and function
   for (; i != args.end(); i++) {
     if (*i == "EXTRA_INCLUDE") {
       ++i;
@@ -46,7 +46,7 @@ bool cmCreateTestSourceList(std::vector<std::string> const& args,
 
   // Name of the source list
 
-  const char* sourceList = i->c_str();
+  char const* sourceList = i->c_str();
   ++i;
 
   // Name of the test driver
@@ -81,8 +81,8 @@ bool cmCreateTestSourceList(std::vector<std::string> const& args,
     }
     std::string func_name;
     if (!cmSystemTools::GetFilenamePath(*i).empty()) {
-      func_name = cmSystemTools::GetFilenamePath(*i) + "/" +
-        cmSystemTools::GetFilenameWithoutLastExtension(*i);
+      func_name = cmStrCat(cmSystemTools::GetFilenamePath(*i), '/',
+                           cmSystemTools::GetFilenameWithoutLastExtension(*i));
     } else {
       func_name = cmSystemTools::GetFilenameWithoutLastExtension(*i);
     }
@@ -93,9 +93,8 @@ bool cmCreateTestSourceList(std::vector<std::string> const& args,
       tests_func_name.end();
     tests_func_name.push_back(func_name);
     if (!already_declared) {
-      forwardDeclareCode += "int ";
-      forwardDeclareCode += func_name;
-      forwardDeclareCode += "(int, char*[]);\n";
+      forwardDeclareCode +=
+        cmStrCat("extern int ", func_name, "(int, char*[]);\n");
     }
   }
 
@@ -105,8 +104,8 @@ bool cmCreateTestSourceList(std::vector<std::string> const& args,
        ++i, ++j) {
     std::string func_name;
     if (!cmSystemTools::GetFilenamePath(*i).empty()) {
-      func_name = cmSystemTools::GetFilenamePath(*i) + "/" +
-        cmSystemTools::GetFilenameWithoutLastExtension(*i);
+      func_name = cmStrCat(cmSystemTools::GetFilenamePath(*i), '/',
+                           cmSystemTools::GetFilenameWithoutLastExtension(*i));
     } else {
       func_name = cmSystemTools::GetFilenameWithoutLastExtension(*i);
     }
@@ -137,12 +136,12 @@ bool cmCreateTestSourceList(std::vector<std::string> const& args,
   {
     cmSourceFile* sf = mf.GetOrCreateSource(driver);
     sf->SetProperty("ABSTRACT", "0");
-    sourceListValue = args[1];
+    sourceListValue = driver;
   }
   for (i = testsBegin; i != tests.end(); ++i) {
     cmSourceFile* sf = mf.GetOrCreateSource(*i);
     sf->SetProperty("ABSTRACT", "0");
-    sourceListValue += ";";
+    sourceListValue += ';';
     sourceListValue += *i;
   }
 

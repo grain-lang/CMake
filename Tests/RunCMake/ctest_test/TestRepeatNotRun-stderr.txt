@@ -1,1 +1,2 @@
-.*Unable to find executable.*
+.*Unable to find executable[^
+]*does_not_exist

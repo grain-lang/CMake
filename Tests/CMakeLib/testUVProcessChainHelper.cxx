@@ -7,11 +7,11 @@
 #include <string>
 #include <thread>
 
+#include "cmsys/SystemTools.hxx"
+
 #ifdef _WIN32
 #  include <windows.h>
 #endif
-
-#include "cmSystemTools.h"
 
 static std::string getStdin()
 {
@@ -32,13 +32,13 @@ int main(int argc, char** argv)
 
   std::string command = argv[1];
   if (command == "echo") {
-    std::this_thread::sleep_for(std::chrono::milliseconds(3000));
+    std::this_thread::sleep_for(std::chrono::milliseconds(6000));
     std::cout << "HELLO world!" << std::flush;
     std::cerr << "1" << std::flush;
     return 0;
   }
   if (command == "capitalize") {
-    std::this_thread::sleep_for(std::chrono::milliseconds(9000));
+    std::this_thread::sleep_for(std::chrono::milliseconds(12000));
     std::string input = getStdin();
     for (auto& c : input) {
       c = static_cast<char>(std::toupper(c));
@@ -73,7 +73,7 @@ int main(int argc, char** argv)
 #endif
   }
   if (command == "pwd") {
-    std::string cwd = cmSystemTools::GetCurrentWorkingDirectory();
+    std::string cwd = cmsys::SystemTools::GetCurrentWorkingDirectory();
     std::cout << cwd << std::flush;
     return 0;
   }

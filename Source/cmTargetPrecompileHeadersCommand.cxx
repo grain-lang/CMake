@@ -1,10 +1,11 @@
 /* Distributed under the OSI-approved BSD 3-Clause License.  See accompanying
-   file Copyright.txt or https://cmake.org/licensing for details.  */
+   file LICENSE.rst or https://cmake.org/licensing for details.  */
 #include "cmTargetPrecompileHeadersCommand.h"
 
 #include <utility>
 
 #include "cmGeneratorExpression.h"
+#include "cmList.h"
 #include "cmListFileCache.h"
 #include "cmMakefile.h"
 #include "cmMessageType.h"
@@ -16,7 +17,7 @@
 namespace {
 
 std::vector<std::string> ConvertToAbsoluteContent(
-  const std::vector<std::string>& content, std::string const& baseDir)
+  std::vector<std::string> const& content, std::string const& baseDir)
 {
   std::vector<std::string> absoluteContent;
   absoluteContent.reserve(content.size());
@@ -44,7 +45,7 @@ public:
 
 private:
   bool HandleDirectContent(cmTarget* tgt,
-                           const std::vector<std::string>& content,
+                           std::vector<std::string> const& content,
                            bool /*prepend*/, bool /*system*/) override
   {
     std::string const& base = this->Makefile->GetCurrentSourceDirectory();
@@ -55,7 +56,7 @@ private:
   }
 
   void HandleInterfaceContent(cmTarget* tgt,
-                              const std::vector<std::string>& content,
+                              std::vector<std::string> const& content,
                               bool prepend, bool system) override
   {
     std::string const& base = this->Makefile->GetCurrentSourceDirectory();
@@ -63,7 +64,7 @@ private:
       tgt, ConvertToAbsoluteContent(content, base), prepend, system);
   }
 
-  void HandleMissingTarget(const std::string& name) override
+  void HandleMissingTarget(std::string const& name) override
   {
     this->Makefile->IssueMessage(
       MessageType::FATAL_ERROR,
@@ -71,9 +72,9 @@ private:
                "\" which is not built by this project."));
   }
 
-  std::string Join(const std::vector<std::string>& content) override
+  std::string Join(std::vector<std::string> const& content) override
   {
-    return cmJoin(content, ";");
+    return cmList::to_string(content);
   }
 };
 

@@ -1,8 +1,9 @@
 /* Distributed under the OSI-approved BSD 3-Clause License.  See accompanying
-   file Copyright.txt or https://cmake.org/licensing for details.  */
+   file LICENSE.rst or https://cmake.org/licensing for details.  */
 #include "cmGeneratedFileStream.h"
 
 #include <cstdio>
+#include <locale>
 
 #include "cmStringAlgorithms.h"
 #include "cmSystemTools.h"
@@ -16,7 +17,7 @@
 cmGeneratedFileStream::cmGeneratedFileStream(Encoding encoding)
 {
 #ifndef CMAKE_BOOTSTRAP
-  if (encoding != codecvt::None) {
+  if (encoding != codecvt_Encoding::None) {
     this->imbue(std::locale(this->getloc(), new codecvt(encoding)));
   }
 #else
@@ -35,13 +36,13 @@ cmGeneratedFileStream::cmGeneratedFileStream(std::string const& name,
     cmSystemTools::ReportLastSystemError("");
   }
 #ifndef CMAKE_BOOTSTRAP
-  if (encoding != codecvt::None) {
+  if (encoding != codecvt_Encoding::None) {
     this->imbue(std::locale(this->getloc(), new codecvt(encoding)));
   }
 #else
   static_cast<void>(encoding);
 #endif
-  if (encoding == codecvt::UTF8_WITH_BOM) {
+  if (encoding == codecvt_Encoding::UTF8_WITH_BOM) {
     // Write the BOM encoding header into the file
     char magic[] = { static_cast<char>(0xEF), static_cast<char>(0xBB),
                      static_cast<char>(0xBF) };
@@ -138,7 +139,7 @@ void cmGeneratedFileStreamBase::Open(std::string const& name)
   } else {
     char buf[64];
     snprintf(buf, sizeof(buf), "tmp%05x",
-             cmSystemTools::RandomSeed() & 0xFFFFF);
+             cmSystemTools::RandomNumber() & 0xFFFFF);
     this->TempName += buf;
   }
 
@@ -202,7 +203,7 @@ int cmGeneratedFileStreamBase::CompressFile(std::string const& oldname,
     return 0;
   }
   size_t res;
-  const size_t BUFFER_SIZE = 1024;
+  size_t const BUFFER_SIZE = 1024;
   char buffer[BUFFER_SIZE];
   while ((res = fread(buffer, 1, BUFFER_SIZE, ifs)) > 0) {
     if (!gzwrite(gf, buffer, static_cast<int>(res))) {
@@ -229,7 +230,7 @@ int cmGeneratedFileStreamBase::RenameFile(std::string const& oldname,
   return cmSystemTools::RenameFile(oldname, newname);
 }
 
-void cmGeneratedFileStream::SetName(const std::string& fname)
+void cmGeneratedFileStream::SetName(std::string const& fname)
 {
   this->Name = cmSystemTools::CollapseFullPath(fname);
 }

@@ -87,7 +87,7 @@ add_test(NAME UseSWIG.BasicPerl5 COMMAND
   --test-command ${CMAKE_CTEST_COMMAND} -V -C $<CONFIGURATION>
   )
 if(SWIG_FOUND AND NOT SWIG_VERSION VERSION_LESS "4.0.2"
-    AND CMAKE_GENERATOR MATCHES "Make|Ninja|Xcode|Visual Studio (1[1-9]|[2-9][0-9])")
+    AND CMAKE_GENERATOR MATCHES "Make|Ninja|Xcode|Visual Studio")
   add_test(NAME UseSWIG.Depfile.BasicPython COMMAND
     ${CMAKE_CTEST_COMMAND} -C $<CONFIGURATION>
     --build-and-test
@@ -134,6 +134,7 @@ if (CMake_TEST_UseSWIG_Fortran)
       --build-options ${build_options}
       --test-command ${CMAKE_CTEST_COMMAND} -V -C $<CONFIGURATION>
       )
+    set_property(TEST UseSWIG.BasicFortran APPEND PROPERTY LABELS "Fortran")
   endif()
 endif()
 
@@ -147,16 +148,18 @@ add_test(NAME UseSWIG.MultipleModules COMMAND
   --build-options ${build_options}
   --test-command ${CMAKE_CTEST_COMMAND} -V -C $<CONFIGURATION>
   )
-add_test(NAME UseSWIG.MultiplePython COMMAND
-  ${CMAKE_CTEST_COMMAND} -C $<CONFIGURATION>
-  --build-and-test
-  "${CMake_SOURCE_DIR}/Tests/UseSWIG/MultiplePython"
-  "${CMake_BINARY_DIR}/Tests/UseSWIG/MultiplePython"
-  ${build_generator_args}
-  --build-project TestMultiplePython
-  --build-options ${build_options}
-  --test-command ${CMAKE_CTEST_COMMAND} -V -C $<CONFIGURATION>
+if(CMake_TEST_FindPython2 AND CMake_TEST_FindPython3)
+  add_test(NAME UseSWIG.MultiplePython COMMAND
+    ${CMAKE_CTEST_COMMAND} -C $<CONFIGURATION>
+    --build-and-test
+    "${CMake_SOURCE_DIR}/Tests/UseSWIG/MultiplePython"
+    "${CMake_BINARY_DIR}/Tests/UseSWIG/MultiplePython"
+    ${build_generator_args}
+    --build-project TestMultiplePython
+    --build-options ${build_options}
+    --test-command ${CMAKE_CTEST_COMMAND} -V -C $<CONFIGURATION>
   )
+endif()
 add_test(NAME UseSWIG.MultipleFiles COMMAND
   ${CMAKE_CTEST_COMMAND} -C $<CONFIGURATION>
   --build-and-test
@@ -165,20 +168,20 @@ add_test(NAME UseSWIG.MultipleFiles COMMAND
   ${build_generator_args}
   --build-project TestMultipleFiles
   --build-options ${build_options}
+)
+
+if(CMake_TEST_FindPython2 OR CMake_TEST_FindPython3)
+  add_test(NAME UseSWIG.ModuleVersion2 COMMAND
+    ${CMAKE_CTEST_COMMAND} -C $<CONFIGURATION>
+    --build-and-test
+    "${CMake_SOURCE_DIR}/Tests/UseSWIG/ModuleVersion2"
+    "${CMake_BINARY_DIR}/Tests/UseSWIG/ModuleVersion2"
+    ${build_generator_args}
+    --build-project TestModuleVersion2
+    --build-options ${build_options}
+    --test-command ${CMAKE_CTEST_COMMAND} -V -C $<CONFIGURATION>
   )
-
-
-add_test(NAME UseSWIG.ModuleVersion2 COMMAND
-  ${CMAKE_CTEST_COMMAND} -C $<CONFIGURATION>
-  --build-and-test
-  "${CMake_SOURCE_DIR}/Tests/UseSWIG/ModuleVersion2"
-  "${CMake_BINARY_DIR}/Tests/UseSWIG/ModuleVersion2"
-  ${build_generator_args}
-  --build-project TestModuleVersion2
-  --build-options ${build_options}
-  --test-command ${CMAKE_CTEST_COMMAND} -V -C $<CONFIGURATION>
-  )
-
+endif()
 
 add_test(NAME UseSWIG.UseTargetINCLUDE_DIRECTORIES COMMAND
   ${CMAKE_CTEST_COMMAND} -C $<CONFIGURATION>

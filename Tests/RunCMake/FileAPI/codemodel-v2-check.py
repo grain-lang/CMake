@@ -12,7 +12,7 @@ def read_codemodel_json_data(filename):
 def check_objects(o, g):
     assert is_list(o)
     assert len(o) == 1
-    check_index_object(o[0], "codemodel", 2, 6, check_object_codemodel(g))
+    check_index_object(o[0], "codemodel", 2, 8, check_object_codemodel(g))
 
 def check_backtrace(t, b, backtrace):
     btg = t["backtraceGraph"]
@@ -24,7 +24,7 @@ def check_backtrace(t, b, backtrace):
 
         if expected["line"] is not None:
             expected_keys.append("line")
-            assert is_int(node["line"], expected["line"])
+            assert is_int(node["line"], expected["line"]), repr(node["line"]) + " != " + repr(expected["line"])
 
         if expected["command"] is not None:
             expected_keys.append("command")
@@ -94,6 +94,8 @@ def check_directory(c):
 
         assert is_string(actual["jsonFile"])
         filepath = os.path.join(reply_dir, actual["jsonFile"])
+        maximum_filename_length = 140
+        assert len(actual["jsonFile"]) <= maximum_filename_length
         with open(filepath) as f:
             d = json.load(f)
 
@@ -405,6 +407,38 @@ def check_target(c):
                              missing_exception=lambda e: "Install path: %s" % e["path"],
                              extra_exception=lambda a: "Install path: %s" % a["path"])
 
+        if "launchers" in expected:
+            if expected["launchers"] is not None:
+                expected_keys.append("launchers")
+                def check_launcher(actual, expected):
+                    assert is_dict(actual)
+                    launcher_keys = ["command", "type"]
+                    if "arguments" in expected:
+                        launcher_keys.append("arguments")
+                    assert sorted(actual.keys()) == sorted(launcher_keys)
+                    assert matches(actual["command"], expected["command"])
+                    assert matches(actual["type"], expected["type"])
+                    if "arguments" in expected:
+                        if expected["arguments"] is not None:
+                            check_list_match(lambda a, e: matches(a, e),
+                                             actual["arguments"], expected["arguments"],
+                                             missing_exception=lambda e: "argument: %s" % e,
+                                             extra_exception=lambda a: "argument: %s" % actual["arguments"])
+                check_list_match(lambda a, e: matches(a["type"], e["type"]),
+                                obj["launchers"], expected["launchers"],
+                                check=check_launcher,
+                                check_exception=lambda a, e: "launchers: %s" % a,
+                                missing_exception=lambda e: "launchers: %s" % e,
+                                extra_exception=lambda a: "launchers: %s" % a)
+
+        if "debugger" in expected:
+            if expected["debugger"] is not None:
+                expected_keys.append("debugger")
+                assert is_dict(obj["debugger"])
+                debugger_keys = ["workingDirectory"]
+                assert sorted(obj["debugger"].keys()) == sorted(debugger_keys)
+                assert matches(obj["debugger"]["workingDirectory"], expected["debugger"]["workingDirectory"])
+
         if expected["link"] is not None:
             expected_keys.append("link")
             assert is_dict(obj["link"])
@@ -709,11 +743,13 @@ def gen_check_directories(c, g):
         read_codemodel_json_data("directories/alias.json"),
         read_codemodel_json_data("directories/custom.json"),
         read_codemodel_json_data("directories/cxx.json"),
+        read_codemodel_json_data("directories/cxx.cross.json"),
         read_codemodel_json_data("directories/imported.json"),
         read_codemodel_json_data("directories/interface.json"),
         read_codemodel_json_data("directories/object.json"),
         read_codemodel_json_data("directories/dir.json"),
         read_codemodel_json_data("directories/dir_dir.json"),
+        read_codemodel_json_data("directories/dir_very-long.json"),
         read_codemodel_json_data("directories/external.json"),
         read_codemodel_json_data("directories/fileset.json"),
         read_codemodel_json_data("directories/subdir.json"),
@@ -782,6 +818,10 @@ def gen_check_targets(c, g, inSource):
         read_codemodel_json_data("targets/zero_check_cxx.json"),
         read_codemodel_json_data("targets/cxx_lib.json"),
         read_codemodel_json_data("targets/cxx_exe.json"),
+        read_codemodel_json_data("targets/cxx_exe_cross_emulator.json"),
+        read_codemodel_json_data("targets/cxx_exe_cross_emulator_args.json"),
+        read_codemodel_json_data("targets/cxx_exe_test_launcher_and_cross_emulator.json"),
+        read_codemodel_json_data("targets/cxx_exe_test_launcher.json"),
         read_codemodel_json_data("targets/cxx_standard_compile_feature_exe.json"),
         read_codemodel_json_data("targets/cxx_standard_exe.json"),
         read_codemodel_json_data("targets/cxx_shared_lib.json"),
@@ -846,7 +886,7 @@ def gen_check_targets(c, g, inSource):
                 e["compileGroups"] = apple_exe_framework["compileGroups"]
                 e["link"] = apple_exe_framework["link"]
 
-    if cxx_compiler_id in ['Clang', 'AppleClang', 'LCC', 'GNU', 'Intel', 'IntelLLVM', 'MSVC', 'Embarcadero', 'IBMClang'] and g["name"] != "Xcode":
+    if cxx_compiler_id in ['Clang', 'AppleClang', 'LCC', 'GNU', 'Intel', 'IntelLLVM', 'MSVC', 'Embarcadero', 'CrayClang', 'IBMClang'] and g["name"] != "Xcode":
         for e in expected:
             if e["name"] == "cxx_exe":
                 if matches(g["name"], "^(Visual Studio |Ninja Multi-Config)"):
@@ -927,6 +967,8 @@ def gen_check_targets(c, g, inSource):
                 for d in e["dependencies"]:
                     if matches(d["id"], "^\\^ZERO_CHECK::@"):
                         d["id"] = "^ZERO_CHECK::@6890427a1f51a3e7e1df$"
+            if e["name"] == "cxx_exe":
+                e["debugger"]["workingDirectory"] = "^/test/debugger/workingDirectoryVS$"
 
     elif g["name"] == "Xcode":
         if ';' in os.environ.get("CMAKE_OSX_ARCHITECTURES", ""):

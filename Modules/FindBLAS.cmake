@@ -1,5 +1,5 @@
 # Distributed under the OSI-approved BSD 3-Clause License.  See accompanying
-# file Copyright.txt or https://cmake.org/licensing for details.
+# file LICENSE.rst or https://cmake.org/licensing for details.
 
 #[=======================================================================[.rst:
 FindBLAS
@@ -54,7 +54,22 @@ The following variables may be set to influence this module's behavior:
     Search for any BLAS/LAPACK.
     Most likely, a BLAS/LAPACK with 32-bit integer interfaces will be found.
 
-Imported targets
+``BLA_THREAD``
+  .. versionadded:: 4.1
+
+  Specify the BLAS/LAPACK threading model:
+
+  ``SEQ``
+    Sequential model
+  ``OMP``
+    OpenMP model
+  ``ANY``
+    Search for any BLAS/LAPACK, if both are available most likely ``OMP`` will
+    be found.
+
+  This is currently only supported by NVIDIA NVPL.
+
+Imported Targets
 ^^^^^^^^^^^^^^^^
 
 This module defines the following :prop_tgt:`IMPORTED` targets:
@@ -163,6 +178,16 @@ BLAS/LAPACK Vendors
   .. versionadded:: 3.17
 
   Intel MKL v10+ 64 bit, single dynamic library
+
+``libblastrampoline``
+  .. versionadded:: 3.30
+
+  A BLAS/LAPACK demuxing library using PLT trampolines
+
+``NVPL``
+  .. versionadded:: 4.1
+
+  NVIDIA Performance Libraries
 
 ``NVHPC``
   .. versionadded:: 3.21
@@ -281,19 +306,21 @@ if(CMAKE_Fortran_COMPILER_LOADED)
 else()
   include(${CMAKE_CURRENT_LIST_DIR}/CheckFunctionExists.cmake)
 endif()
-include(${CMAKE_CURRENT_LIST_DIR}/FindPackageHandleStandardArgs.cmake)
+include(FindPackageHandleStandardArgs)
 
 if(BLA_PREFER_PKGCONFIG)
   if(NOT BLA_PKGCONFIG_BLAS)
     set(BLA_PKGCONFIG_BLAS "blas")
   endif()
   find_package(PkgConfig QUIET)
-  pkg_check_modules(PKGC_BLAS QUIET ${BLA_PKGCONFIG_BLAS})
-  if(PKGC_BLAS_FOUND)
-    set(BLAS_FOUND ${PKGC_BLAS_FOUND})
-    set(BLAS_LIBRARIES "${PKGC_BLAS_LINK_LIBRARIES}")
-    _add_blas_target()
-    return()
+  if(PKG_CONFIG_FOUND)
+    pkg_check_modules(PKGC_BLAS QUIET ${BLA_PKGCONFIG_BLAS})
+    if(PKGC_BLAS_FOUND)
+      set(BLAS_FOUND ${PKGC_BLAS_FOUND})
+      set(BLAS_LIBRARIES "${PKGC_BLAS_LINK_LIBRARIES}")
+      _add_blas_target()
+      return()
+    endif()
   endif()
 endif()
 
@@ -408,6 +435,16 @@ elseif((BLA_SIZEOF_INTEGER STREQUAL "ANY") OR
   set(_blas_sizeof_integer ${BLA_SIZEOF_INTEGER})
 else()
   message(FATAL_ERROR "BLA_SIZEOF_INTEGER can have only <no value>, ANY, 4, or 8 values")
+endif()
+
+if(NOT BLA_THREAD)
+  set(_blas_thread "ANY")
+elseif((BLA_THREAD STREQUAL "ANY") OR
+       (BLA_THREAD STREQUAL "SEQ") OR
+       (BLA_THREAD STREQUAL "OMP"))
+  set(_blas_thread ${BLA_THREAD})
+else()
+  message(FATAL_ERROR "BLA_THREAD can have only <no value>, ANY, SEQ, or OMP values")
 endif()
 
 # Implicitly linked BLAS libraries?
@@ -746,7 +783,11 @@ if(BLA_VENDOR STREQUAL "OpenBLAS" OR BLA_VENDOR STREQUAL "All")
   set(_blas_openblas_lib "openblas")
 
   if(_blas_sizeof_integer EQUAL 8)
-    string(APPEND _blas_openblas_lib "64")
+    if(MINGW)
+      string(APPEND _blas_openblas_lib "_64")
+    else()
+      string(APPEND _blas_openblas_lib "64")
+    endif()
   endif()
 
   if(NOT BLAS_LIBRARIES)
@@ -1304,6 +1345,52 @@ if(NOT BLAS_LIBRARIES
   unset(_blas_fjlapack_lib)
 endif()
 
+# nVidia NVPL? (https://developer.nvidia.com/nvpl)
+if(BLA_VENDOR STREQUAL "NVPL" OR BLA_VENDOR STREQUAL "All")
+  # Prefer lp64 unless ilp64 is requested.
+  if((_blas_sizeof_integer EQUAL 4) OR (_blas_sizeof_integer STREQUAL "ANY"))
+    list(APPEND _blas_nvpl_ints "_lp64")
+  endif()
+  if((_blas_sizeof_integer EQUAL 8) OR (_blas_sizeof_integer STREQUAL "ANY"))
+    list(APPEND _blas_nvpl_ints "_ilp64")
+  endif()
+
+  # Prefer OMP if available
+  if((_blas_thread STREQUAL "OMP") OR (_blas_thread STREQUAL "ANY"))
+    list(APPEND _blas_nvpl_threads "_omp")
+  endif()
+  if((_blas_thread STREQUAL "SEQ") OR (_blas_thread STREQUAL "ANY"))
+    list(APPEND _blas_nvpl_threads "_seq")
+  endif()
+
+  if(NOT BLAS_LIBRARIES)
+    find_package(nvpl)
+    if(nvpl_FOUND)
+      foreach(_nvpl_thread IN LISTS _blas_nvpl_threads)
+        foreach(_nvpl_int IN LISTS _blas_nvpl_ints)
+
+          set(_blas_lib "nvpl::blas${_nvpl_int}${_nvpl_thread}")
+
+          if(TARGET ${_blas_lib})
+            set(BLAS_LIBRARIES ${_blas_lib})
+            break()
+          endif()
+
+        endforeach()
+
+        if(BLAS_LIBRARIES)
+          break()
+        endif()
+
+      endforeach()
+    endif()
+  endif()
+
+  unset(_blas_lib)
+  unset(_blas_nvpl_ints)
+  unset(_blas_nvpl_threads)
+endif()
+
 # BLAS in nVidia HPC SDK? (https://developer.nvidia.com/hpc-sdk)
 if(BLA_VENDOR STREQUAL "NVHPC" OR BLA_VENDOR STREQUAL "All")
   set(_blas_nvhpc_lib "blas")
@@ -1346,6 +1433,31 @@ if(BLA_VENDOR STREQUAL "NVHPC" OR BLA_VENDOR STREQUAL "All")
   endif()
 
   unset(_blas_nvhpc_lib)
+endif()
+
+# libblastrampoline? (https://github.com/JuliaLinearAlgebra/libblastrampoline/tree/main)
+if(BLA_VENDOR STREQUAL "libblastrampoline" OR BLA_VENDOR STREQUAL "All")
+  set(_blas_libblastrampoline_lib "blastrampoline")
+
+  if(WIN32)
+    # Windows appends the version number to the library
+    string(APPEND _blas_libblastrampoline_lib "-5")
+  endif()
+
+  if(NOT BLAS_LIBRARIES)
+    check_blas_libraries(
+      BLAS_LIBRARIES
+      BLAS
+      sgemm
+      ""
+      "${_blas_libblastrampoline_lib}"
+      ""
+      ""
+      ""
+      )
+  endif()
+
+  unset(_blas_libblastrampoline_lib)
 endif()
 
 # Generic BLAS library?

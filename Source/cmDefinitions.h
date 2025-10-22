@@ -1,10 +1,9 @@
 /* Distributed under the OSI-approved BSD 3-Clause License.  See accompanying
-   file Copyright.txt or https://cmake.org/licensing for details.  */
+   file LICENSE.rst or https://cmake.org/licensing for details.  */
 #pragma once
 
 #include "cmConfigure.h" // IWYU pragma: keep
 
-#include <functional>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -29,11 +28,11 @@ class cmDefinitions
 public:
   // -- Static member functions
 
-  static cmValue Get(const std::string& key, StackIter begin, StackIter end);
+  static cmValue Get(std::string const& key, StackIter begin, StackIter end);
 
-  static void Raise(const std::string& key, StackIter begin, StackIter end);
+  static void Raise(std::string const& key, StackIter begin, StackIter end);
 
-  static bool HasKey(const std::string& key, StackIter begin, StackIter end);
+  static bool HasKey(std::string const& key, StackIter begin, StackIter end);
 
   static std::vector<std::string> ClosureKeys(StackIter begin, StackIter end);
 
@@ -42,10 +41,10 @@ public:
   // -- Member functions
 
   /** Set a value associated with a key.  */
-  void Set(const std::string& key, cm::string_view value);
+  void Set(std::string const& key, cm::string_view value);
 
   /** Unset a definition.  */
-  void Unset(const std::string& key);
+  void Unset(std::string const& key);
 
 private:
   /** String with existence boolean.  */
@@ -63,6 +62,6 @@ private:
 
   std::unordered_map<cm::String, Def> Map;
 
-  static Def const& GetInternal(const std::string& key, StackIter begin,
+  static Def const& GetInternal(std::string const& key, StackIter begin,
                                 StackIter end, bool raise);
 };

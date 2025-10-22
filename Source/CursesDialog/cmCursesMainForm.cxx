@@ -1,5 +1,5 @@
 /* Distributed under the OSI-approved BSD 3-Clause License.  See accompanying
-   file Copyright.txt or https://cmake.org/licensing for details.  */
+   file LICENSE.rst or https://cmake.org/licensing for details.  */
 #include "cmCursesMainForm.h"
 
 #include <algorithm>
@@ -61,7 +61,7 @@ cmCursesMainForm::~cmCursesMainForm()
 }
 
 // See if a cache entry is in the list of entries in the ui.
-bool cmCursesMainForm::LookForCacheEntry(const std::string& key)
+bool cmCursesMainForm::LookForCacheEntry(std::string const& key)
 {
   return std::any_of(this->Entries.begin(), this->Entries.end(),
                      [&key](cmCursesCacheEntryComposite const& entry) {
@@ -72,6 +72,9 @@ bool cmCursesMainForm::LookForCacheEntry(const std::string& key)
 // Create new cmCursesCacheEntryComposite entries from the cache
 void cmCursesMainForm::InitializeUI()
 {
+  // Hide the cursor by default
+  curs_set(0);
+
   // Create a vector of cmCursesCacheEntryComposite's
   // which contain labels, entries and new entry markers
   std::vector<cmCursesCacheEntryComposite> newEntries;
@@ -271,7 +274,7 @@ void cmCursesMainForm::Render(int left, int top, int width, int height)
         this->NumberOfPages++;
       }
       entry.Label->Move(left, top + row - 1, isNewPage);
-      entry.IsNewLabel->Move(left + 32, top + row - 1, false);
+      entry.IsNewLabel->Move(left + 30, top + row - 1, false);
       entry.Entry->Move(left + 33, top + row - 1, false);
       entry.Entry->SetPage(this->NumberOfPages);
       i++;
@@ -307,7 +310,7 @@ void cmCursesMainForm::PrintKeys(int process /* = 0 */)
   }
 
   char fmt_s[] = "%s";
-  if (cw == nullptr || !cw->PrintKeys()) {
+  if (!cw || !cw->PrintKeys()) {
     char firstLine[512] = "";
     char secondLine[512] = "";
     char thirdLine[512] = "";
@@ -326,7 +329,7 @@ void cmCursesMainForm::PrintKeys(int process /* = 0 */)
                  "                           ");
       }
       {
-        const char* toggleKeyInstruction =
+        char const* toggleKeyInstruction =
           "      [t] Toggle advanced mode (currently %s)";
         snprintf(thirdLine, sizeof(thirdLine), toggleKeyInstruction,
                  this->AdvancedMode ? "on" : "off");
@@ -424,8 +427,11 @@ void cmCursesMainForm::UpdateStatusBar(cm::optional<std::string> message)
   // Fields are grouped by 3, the first one being the label
   // so start at 0 and move up by 3 avoiding the last null entry
   for (size_type index = 0; index < this->Fields.size() - 1; index += 3) {
-    bool currentLabel = index == currentLabelIndex;
-    set_field_fore(this->Fields[index], currentLabel ? A_STANDOUT : A_NORMAL);
+    int attr = (index == currentLabelIndex) ? A_STANDOUT : A_NORMAL;
+    set_field_fore(this->Fields[index], attr);
+    set_field_back(this->Fields[index], attr);
+    set_field_fore(this->Fields[index + 1], attr);
+    set_field_back(this->Fields[index + 1], attr);
   }
 
   // Display CMake version under the status bar
@@ -439,7 +445,7 @@ void cmCursesMainForm::UpdateStatusBar(cm::optional<std::string> message)
   pos_form_cursor(this->Form);
 }
 
-void cmCursesMainForm::UpdateProgress(const std::string& msg, float prog)
+void cmCursesMainForm::UpdateProgress(std::string const& msg, float prog)
 {
   if (prog >= 0) {
     constexpr int progressBarWidth = 40;
@@ -458,6 +464,14 @@ void cmCursesMainForm::UpdateProgress(const std::string& msg, float prog)
   }
 }
 
+void cmCursesMainForm::Write()
+{
+  this->FillCacheManagerFromUI();
+  this->CMakeInstance->SaveCache(
+    this->CMakeInstance->GetHomeOutputDirectory());
+  this->LoadCache(nullptr);
+}
+
 int cmCursesMainForm::Configure(int noconfigure)
 {
   this->ResetOutputs();
@@ -465,16 +479,13 @@ int cmCursesMainForm::Configure(int noconfigure)
   if (noconfigure == 0) {
     this->UpdateProgress("Configuring", 0);
     this->CMakeInstance->SetProgressCallback(
-      [this](const std::string& msg, float prog) {
+      [this](std::string const& msg, float prog) {
         this->UpdateProgress(msg, prog);
       });
   }
 
   // always save the current gui values to disk
-  this->FillCacheManagerFromUI();
-  this->CMakeInstance->SaveCache(
-    this->CMakeInstance->GetHomeOutputDirectory());
-  this->LoadCache(nullptr);
+  this->Write();
 
   // run the generate process
   this->OkToGenerate = true;
@@ -500,7 +511,7 @@ int cmCursesMainForm::Configure(int noconfigure)
     int xx;
     int yy;
     getmaxyx(stdscr, yy, xx);
-    const char* title = "Configure produced the following output";
+    char const* title = "Configure produced the following output";
     if (cmSystemTools::GetErrorOccurredFlag()) {
       title = "Configure failed with the following output";
     }
@@ -535,7 +546,7 @@ int cmCursesMainForm::Generate()
 
   this->UpdateProgress("Generating", 0);
   this->CMakeInstance->SetProgressCallback(
-    [this](const std::string& msg, float prog) {
+    [this](std::string const& msg, float prog) {
       this->UpdateProgress(msg, prog);
     });
 
@@ -555,7 +566,7 @@ int cmCursesMainForm::Generate()
     int xx;
     int yy;
     getmaxyx(stdscr, yy, xx);
-    const char* title = "Generate produced the following output";
+    char const* title = "Generate produced the following output";
     if (cmSystemTools::GetErrorOccurredFlag()) {
       title = "Generate failed with the following output";
     }
@@ -582,15 +593,15 @@ int cmCursesMainForm::Generate()
   return 0;
 }
 
-void cmCursesMainForm::AddError(const std::string& message,
-                                const char* /*unused*/)
+void cmCursesMainForm::AddError(std::string const& message,
+                                char const* /*unused*/)
 {
   this->Outputs.emplace_back(message);
   this->HasNonStatusOutputs = true;
   this->DisplayOutputs(message);
 }
 
-void cmCursesMainForm::RemoveEntry(const char* value)
+void cmCursesMainForm::RemoveEntry(char const* value)
 {
   if (!value) {
     return;
@@ -599,8 +610,8 @@ void cmCursesMainForm::RemoveEntry(const char* value)
   auto removeIt =
     std::find_if(this->Entries.begin(), this->Entries.end(),
                  [value](cmCursesCacheEntryComposite& entry) -> bool {
-                   const char* val = entry.GetValue();
-                   return val != nullptr && !strcmp(value, val);
+                   char const* val = entry.GetValue();
+                   return val && !strcmp(value, val);
                  });
 
   if (removeIt != this->Entries.end()) {
@@ -613,7 +624,7 @@ void cmCursesMainForm::RemoveEntry(const char* value)
 void cmCursesMainForm::FillCacheManagerFromUI()
 {
   for (cmCursesCacheEntryComposite& entry : this->Entries) {
-    const std::string& cacheKey = entry.Key;
+    std::string const& cacheKey = entry.Key;
     cmValue existingValue =
       this->CMakeInstance->GetState()->GetCacheEntryValue(cacheKey);
     if (existingValue) {
@@ -638,7 +649,7 @@ void cmCursesMainForm::FillCacheManagerFromUI()
 }
 
 void cmCursesMainForm::FixValue(cmStateEnums::CacheEntryType type,
-                                const std::string& in, std::string& out) const
+                                std::string const& in, std::string& out) const
 {
   out = in.substr(0, in.find_last_not_of(' ') + 1);
   if (type == cmStateEnums::PATH || type == cmStateEnums::FILEPATH) {
@@ -651,6 +662,12 @@ void cmCursesMainForm::FixValue(cmStateEnums::CacheEntryType type,
       out = "ON";
     }
   }
+}
+
+void cmCursesMainForm::SetSearchMode(bool enable)
+{
+  this->SearchMode = enable;
+  curs_set(enable);
 }
 
 void cmCursesMainForm::HandleInput()
@@ -705,7 +722,7 @@ void cmCursesMainForm::HandleInput()
 
     if (this->SearchMode) {
       if (key == 10 || key == KEY_ENTER) {
-        this->SearchMode = false;
+        this->SetSearchMode(false);
         if (!this->SearchString.empty()) {
           this->JumpToCacheEntry(this->SearchString.c_str());
           this->OldSearchString = this->SearchString;
@@ -794,6 +811,21 @@ void cmCursesMainForm::HandleInput()
       else if (key == KEY_PPAGE || key == ctrl('u')) {
         form_driver(this->Form, REQ_PREV_PAGE);
       }
+      // first entry
+      else if (key == KEY_HOME) {
+        form_driver(this->Form, REQ_FIRST_PAGE);
+        form_driver(this->Form, REQ_FIRST_FIELD);
+      }
+      // last entry
+      else if (key == KEY_END) {
+        form_driver(this->Form, REQ_LAST_PAGE);
+        form_driver(this->Form, REQ_LAST_FIELD);
+      }
+      // write and quit
+      else if (key == 'w') {
+        this->Write();
+        break;
+      }
       // configure
       else if (key == 'c') {
         this->Configure();
@@ -806,7 +838,7 @@ void cmCursesMainForm::HandleInput()
         int findex = field_index(cur);
         cmCursesWidget* lbl = reinterpret_cast<cmCursesWidget*>(
           field_userptr(this->Fields[findex - 2]));
-        const char* curField = lbl->GetValue();
+        char const* curField = lbl->GetValue();
         cmValue helpString = nullptr;
 
         cmValue existingValue =
@@ -816,9 +848,10 @@ void cmCursesMainForm::HandleInput()
             curField, "HELPSTRING");
         }
         if (helpString) {
-          this->HelpMessage[1] =
-            cmStrCat("Current option is: ", curField, '\n',
-                     "Help string for this option is: ", *helpString, '\n');
+          this->HelpMessage[1] = cmStrCat("Current option is: ", curField,
+                                          "\n"
+                                          "Help string for this option is: ",
+                                          *helpString, '\n');
         } else {
           this->HelpMessage[1] = "";
         }
@@ -845,7 +878,7 @@ void cmCursesMainForm::HandleInput()
         CurrentForm = this;
         this->Render(1, 1, x, y);
       } else if (key == '/') {
-        this->SearchMode = true;
+        this->SetSearchMode(true);
         this->UpdateStatusBar("Search");
         this->PrintKeys(1);
         touchwin(stdscr);
@@ -853,6 +886,10 @@ void cmCursesMainForm::HandleInput()
       } else if (key == 'n') {
         if (!this->OldSearchString.empty()) {
           this->JumpToCacheEntry(this->OldSearchString.c_str());
+        }
+      } else if (key == 'N') {
+        if (!this->OldSearchString.empty()) {
+          this->JumpToCacheEntry(this->OldSearchString.c_str(), true);
         }
       }
       // switch advanced on/off
@@ -931,19 +968,29 @@ void cmCursesMainForm::HandleInput()
   }
 }
 
-int cmCursesMainForm::LoadCache(const char* /*unused*/)
+int cmCursesMainForm::LoadCache(char const* /*unused*/)
 
 {
   int r = this->CMakeInstance->LoadCache();
   if (r < 0) {
     return r;
   }
+
+  // Process presets before loading the cache
+  this->CMakeInstance->ProcessPresetVariables();
+  this->CMakeInstance->ProcessPresetEnvironment();
+
   this->CMakeInstance->SetCacheArgs(this->Args);
   this->CMakeInstance->PreLoadCMakeFiles();
   return r;
 }
 
-void cmCursesMainForm::JumpToCacheEntry(const char* astr)
+void cmCursesMainForm::JumpToCacheEntry(char const* astr)
+{
+  this->JumpToCacheEntry(astr, false);
+}
+
+void cmCursesMainForm::JumpToCacheEntry(char const* astr, bool reverse)
 {
   std::string str;
   if (astr) {
@@ -964,7 +1011,7 @@ void cmCursesMainForm::JumpToCacheEntry(const char* astr)
           field_userptr(this->Fields[findex - 2]));
       }
       if (lbl) {
-        const char* curField = lbl->GetValue();
+        char const* curField = lbl->GetValue();
         if (curField) {
           std::string cfld = cmSystemTools::LowerCase(curField);
           if (cfld.find(str) != std::string::npos && findex != start_index) {
@@ -973,12 +1020,21 @@ void cmCursesMainForm::JumpToCacheEntry(const char* astr)
         }
       }
     }
-    if (static_cast<size_t>(findex) >= 3 * this->NumberOfVisibleEntries - 1) {
-      set_current_field(this->Form, this->Fields[2]);
-    } else if (new_page(this->Fields[findex + 1])) {
-      form_driver(this->Form, REQ_NEXT_PAGE);
+    if (!reverse &&
+        static_cast<size_t>(findex) >= 3 * this->NumberOfVisibleEntries - 1) {
+      form_driver(this->Form, REQ_FIRST_PAGE);
+      form_driver(this->Form, REQ_FIRST_FIELD);
+    } else if (reverse && static_cast<size_t>(findex) < 3) {
+      form_driver(this->Form, REQ_LAST_PAGE);
+      form_driver(this->Form, REQ_LAST_FIELD);
+    } else if (this->Fields[findex + (reverse ? -3 : 1)]->page !=
+               this->Fields[findex]->page) {
+      form_driver(this->Form, reverse ? REQ_PREV_PAGE : REQ_NEXT_PAGE);
+      if (reverse) {
+        form_driver(this->Form, REQ_LAST_FIELD);
+      }
     } else {
-      form_driver(this->Form, REQ_NEXT_FIELD);
+      form_driver(this->Form, reverse ? REQ_PREV_FIELD : REQ_NEXT_FIELD);
     }
     cur = current_field(this->Form);
     findex = field_index(cur);
@@ -1014,7 +1070,7 @@ void cmCursesMainForm::DisplayOutputs(std::string const& newOutput)
   }
 }
 
-const char* cmCursesMainForm::s_ConstHelpMessage =
+char const* cmCursesMainForm::s_ConstHelpMessage =
   "CMake is used to configure and generate build files for software projects. "
   "The basic steps for configuring a project with ccmake are as follows:\n\n"
   "1. Run ccmake in the directory where you want the object and executable "
@@ -1040,15 +1096,21 @@ const char* cmCursesMainForm::s_ConstHelpMessage =
   "hit 'g' to have CMake generate all the build files (i.e. makefiles or "
   "project files) and exit. "
   "At any point during the process, you can exit ccmake with 'q'. However, "
-  "this will not generate/change any build files.\n\n"
+  "this will not generate/change any build files. Additionally, you can exit "
+  "ccmake with 'w' to write changes to the cache file without generating or "
+  "changing the build files.\n\n"
   "ccmake KEYS:\n\n"
   "Navigation: "
   "You can use the arrow keys and page up, down to navigate the options. "
-  "Alternatively, you can use the following keys: \n"
+  "Additionally, you can use the following keys: \n"
   " C-n or j : next option\n"
   " C-p or k : previous options\n"
   " C-d : down one page\n"
-  " C-u : up one page\n\n"
+  " C-u : up one page\n"
+  " Home : jump to first option\n"
+  " End : jump to last option\n"
+  " n : next search result\n"
+  " N : previous search result\n\n"
   "Editing options: "
   "To change an option  press enter or return. If the current options is a "
   "boolean, this will toggle its value. "

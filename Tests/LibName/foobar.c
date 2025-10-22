@@ -1,9 +1,10 @@
 #ifdef _WIN32
 __declspec(dllimport)
 #endif
-  extern void bar();
+extern void
+bar();
 
-int main()
+int main(void)
 {
   bar();
   return 0;

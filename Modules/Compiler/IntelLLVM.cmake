@@ -1,5 +1,5 @@
 # Distributed under the OSI-approved BSD 3-Clause License.  See accompanying
-# file Copyright.txt or https://cmake.org/licensing for details.
+# file LICENSE.rst or https://cmake.org/licensing for details.
 
 
 # This module is shared by multiple languages; use include blocker.
@@ -19,9 +19,11 @@ set(__pch_header_OBJCXX "objective-c++-header")
 macro(__compiler_intel_llvm_common lang)
   set(_CMAKE_${lang}_IPO_SUPPORTED_BY_CMAKE YES)
   set(_CMAKE_${lang}_IPO_MAY_BE_SUPPORTED_BY_COMPILER YES)
-  set(CMAKE_${lang}_ARCHIVE_CREATE_IPO "\"${CMAKE_${lang}_COMPILER_AR}\" cr <TARGET> <LINK_FLAGS> <OBJECTS>")
-  set(CMAKE_${lang}_ARCHIVE_APPEND_IPO "\"${CMAKE_${lang}_COMPILER_AR}\" r <TARGET> <LINK_FLAGS> <OBJECTS>")
+  set(CMAKE_${lang}_ARCHIVE_CREATE_IPO "\"${CMAKE_${lang}_COMPILER_AR}\" qc <TARGET> <LINK_FLAGS> <OBJECTS>")
+  set(CMAKE_${lang}_ARCHIVE_APPEND_IPO "\"${CMAKE_${lang}_COMPILER_AR}\" q <TARGET> <LINK_FLAGS> <OBJECTS>")
   set(CMAKE_${lang}_ARCHIVE_FINISH_IPO "\"${CMAKE_${lang}_COMPILER_RANLIB}\" <TARGET>")
+
+  set(CMAKE_${lang}_LINK_MODE DRIVER)
 endmacro()
 
 if(CMAKE_HOST_WIN32)
@@ -32,6 +34,12 @@ if(CMAKE_HOST_WIN32)
     else()
       set(CMAKE_${lang}_COMPILE_OPTIONS_INVALID_PCH -Winvalid-pch)
       set(CMAKE_${lang}_COMPILE_OPTIONS_WARNING_AS_ERROR "-WX")
+      if(CMAKE_${lang}_COMPILER_VERSION VERSION_GREATER_EQUAL "2021.4")
+        set(CMAKE_INCLUDE_SYSTEM_FLAG_${lang} "-external:I")
+        if(CMAKE_${lang}_COMPILER_VERSION VERSION_GREATER_EQUAL "2022.2")
+          set(CMAKE_INCLUDE_SYSTEM_FLAG_${lang}_WARNING "-external:W0 ")
+        endif()
+      endif()
     endif()
     __compiler_intel_llvm_common(${lang})
     set(CMAKE_${lang}_COMPILE_OPTIONS_IPO "-Qipo")
@@ -44,6 +52,13 @@ else()
 
     string(APPEND CMAKE_${lang}_FLAGS_INIT " ")
     string(APPEND CMAKE_${lang}_FLAGS_DEBUG_INIT " -g")
+    if(CMAKE_${lang}_COMPILER_VERSION VERSION_GREATER_EQUAL 2023.0.0)
+      if("x${lang}" STREQUAL "xFortran")
+        string(APPEND CMAKE_${lang}_FLAGS_DEBUG_INIT " -diag-disable:10440")
+      else()
+        string(APPEND CMAKE_${lang}_FLAGS_DEBUG_INIT " -Rno-debug-disables-optimization")
+      endif()
+    endif()
     string(APPEND CMAKE_${lang}_FLAGS_MINSIZEREL_INIT " -Os")
     string(APPEND CMAKE_${lang}_FLAGS_RELEASE_INIT " -O3")
     string(APPEND CMAKE_${lang}_FLAGS_RELWITHDEBINFO_INIT " -O2 -g")
@@ -59,6 +74,8 @@ else()
 
     set(CMAKE_${lang}_LINKER_WRAPPER_FLAG "-Wl,")
     set(CMAKE_${lang}_LINKER_WRAPPER_FLAG_SEP ",")
+
+    set(CMAKE_${lang}_LINK_MODE DRIVER)
 
     # distcc does not transform -o to -MT when invoking the preprocessor
     # internally, as it ought to.  Work around this bug by setting -MT here
@@ -87,7 +104,7 @@ else()
         list(APPEND CMAKE_${lang}_COMPILER_PREDEFINES_COMMAND ${_COMPILER_ARGS})
         unset(_COMPILER_ARGS)
       endif()
-      list(APPEND CMAKE_${lang}_COMPILER_PREDEFINES_COMMAND "-dM" "-E" "-c" "${CMAKE_ROOT}/Modules/CMakeCXXCompilerABI.cpp")
+      list(APPEND CMAKE_${lang}_COMPILER_PREDEFINES_COMMAND "-w" "-dM" "-E" "${CMAKE_ROOT}/Modules/CMakeCXXCompilerABI.cpp")
       if(CMAKE_${lang}_COMPILER_TARGET)
         list(APPEND CMAKE_${lang}_COMPILER_PREDEFINES_COMMAND "--target=${CMAKE_${lang}_COMPILER_TARGET}")
       endif()

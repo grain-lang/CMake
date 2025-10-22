@@ -1,5 +1,5 @@
 # Distributed under the OSI-approved BSD 3-Clause License.  See accompanying
-# file Copyright.txt or https://cmake.org/licensing for details.
+# file LICENSE.rst or https://cmake.org/licensing for details.
 
 
 # determine the compiler to use for C programs
@@ -16,7 +16,6 @@
 #   CMAKE_C_COMPILER
 #   CMAKE_AR
 #   CMAKE_RANLIB
-#   CMAKE_COMPILER_IS_GNUCC
 #
 # If not already set before, it also sets
 #   _CMAKE_TOOLCHAIN_PREFIX
@@ -166,6 +165,11 @@ if (NOT _CMAKE_TOOLCHAIN_PREFIX)
       set(_CMAKE_TOOLCHAIN_PREFIX ${CMAKE_MATCH_1})
       set(_CMAKE_TOOLCHAIN_SUFFIX ${CMAKE_MATCH_4})
       set(_CMAKE_COMPILER_SUFFIX ${CMAKE_MATCH_6})
+    elseif(CMAKE_C_COMPILER_ID MATCHES "TIClang")
+       if (COMPILER_BASENAME MATCHES "^(.+)?clang(\\.exe)?$")
+         set(_CMAKE_TOOLCHAIN_PREFIX "${CMAKE_MATCH_1}")
+         set(_CMAKE_TOOLCHAIN_SUFFIX "${CMAKE_MATCH_2}")
+       endif()
     elseif(CMAKE_C_COMPILER_ID MATCHES "Clang")
       if(CMAKE_C_COMPILER_TARGET)
         set(_CMAKE_TOOLCHAIN_PREFIX ${CMAKE_C_COMPILER_TARGET}-)
@@ -203,13 +207,6 @@ if(CMAKE_C_COMPILER_SYSROOT)
     "set(CMAKE_COMPILER_SYSROOT \"${CMAKE_C_COMPILER_SYSROOT}\")")
 else()
   set(_SET_CMAKE_C_COMPILER_SYSROOT "")
-endif()
-
-if(CMAKE_C_COMPILER_ARCHITECTURE_ID)
-  set(_SET_CMAKE_C_COMPILER_ARCHITECTURE_ID
-    "set(CMAKE_C_COMPILER_ARCHITECTURE_ID ${CMAKE_C_COMPILER_ARCHITECTURE_ID})")
-else()
-  set(_SET_CMAKE_C_COMPILER_ARCHITECTURE_ID "")
 endif()
 
 if(MSVC_C_ARCHITECTURE_ID)

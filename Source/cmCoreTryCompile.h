@@ -1,14 +1,16 @@
 /* Distributed under the OSI-approved BSD 3-Clause License.  See accompanying
-   file Copyright.txt or https://cmake.org/licensing for details.  */
+   file LICENSE.rst or https://cmake.org/licensing for details.  */
 #pragma once
 
 #include "cmConfigure.h" // IWYU pragma: keep
 
 #include <map>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include <cm/optional>
+#include <cm/string_view>
 
 #include "cmArgumentParser.h"
 #include "cmArgumentParserTypes.h"
@@ -51,17 +53,36 @@ public:
 
   struct Arguments : public ArgumentParser::ParseResult
   {
+    Arguments(cmMakefile const* mf)
+      : Makefile(mf)
+    {
+    }
+
+    cmMakefile const* Makefile;
+
+    enum class SourceType
+    {
+      Normal,
+      CxxModule,
+      Directory,
+    };
+
     cm::optional<std::string> CompileResultVariable;
     cm::optional<std::string> BinaryDirectory;
     cm::optional<std::string> SourceDirectoryOrFile;
     cm::optional<std::string> ProjectName;
     cm::optional<std::string> TargetName;
-    cm::optional<ArgumentParser::NonEmpty<std::vector<std::string>>> Sources;
-    cm::optional<ArgumentParser::NonEmpty<std::vector<std::string>>>
+    cm::optional<ArgumentParser::NonEmpty<
+      std::vector<std::pair<std::string, SourceType>>>>
+      Sources;
+    cm::optional<ArgumentParser::NonEmpty<
+      std::vector<std::pair<std::string, SourceType>>>>
       SourceFromContent;
-    cm::optional<ArgumentParser::NonEmpty<std::vector<std::string>>>
+    cm::optional<ArgumentParser::NonEmpty<
+      std::vector<std::pair<std::string, SourceType>>>>
       SourceFromVar;
-    cm::optional<ArgumentParser::NonEmpty<std::vector<std::string>>>
+    cm::optional<ArgumentParser::NonEmpty<
+      std::vector<std::pair<std::string, SourceType>>>>
       SourceFromFile;
     ArgumentParser::MaybeEmpty<std::vector<std::string>> CMakeFlags{
       1, "CMAKE_FLAGS"
@@ -70,6 +91,7 @@ public:
     cm::optional<ArgumentParser::MaybeEmpty<std::vector<std::string>>>
       LinkLibraries;
     ArgumentParser::MaybeEmpty<std::vector<std::string>> LinkOptions;
+    cm::optional<std::string> LinkerLanguage;
     std::map<std::string, std::string> LangProps;
     std::string CMakeInternal;
     cm::optional<std::string> OutputVariable;
@@ -78,6 +100,10 @@ public:
     cm::optional<ArgumentParser::NonEmpty<std::string>> LogDescription;
     bool NoCache = false;
     bool NoLog = false;
+
+    ArgumentParser::Continue SetSourceType(cm::string_view sourceType);
+    SourceType SourceTypeContext = SourceType::Normal;
+    std::string SourceTypeError;
 
     // Argument for try_run only.
     // Keep in sync with warnings in cmCoreTryCompile::ParseArgs.
@@ -120,7 +146,7 @@ public:
   TryCompileCode. The result is stored in OutputFile. If nothing is found,
   the error message is stored in FindErrorMessage.
    */
-  void FindOutputFile(const std::string& targetName);
+  void FindOutputFile(std::string const& targetName);
 
   static void WriteTryCompileEventFields(
     cmConfigureLog& log, cmTryCompileResult const& compileResult);
@@ -136,7 +162,7 @@ private:
                           char const* command) const;
 
   Arguments ParseArgs(
-    const cmRange<std::vector<std::string>::const_iterator>& args,
-    const cmArgumentParser<Arguments>& parser,
+    cmRange<std::vector<std::string>::const_iterator> const& args,
+    cmArgumentParser<Arguments> const& parser,
     std::vector<std::string>& unparsedArguments);
 };

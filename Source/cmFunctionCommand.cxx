@@ -1,5 +1,5 @@
 /* Distributed under the OSI-approved BSD 3-Clause License.  See accompanying
-   file Copyright.txt or https://cmake.org/licensing for details.  */
+   file LICENSE.rst or https://cmake.org/licensing for details.  */
 #include "cmFunctionCommand.h"
 
 #include <utility>
@@ -11,6 +11,7 @@
 
 #include "cmExecutionStatus.h"
 #include "cmFunctionBlocker.h"
+#include "cmList.h"
 #include "cmListFileCache.h"
 #include "cmMakefile.h"
 #include "cmPolicies.h"
@@ -78,7 +79,7 @@ bool cmFunctionHelperCommand::operator()(
 
   // set the values for ARGV0 ARGV1 ...
   for (auto t = 0u; t < expandedArgs.size(); ++t) {
-    auto const value = cmStrCat(ARGV, std::to_string(t));
+    auto const value = cmStrCat(ARGV, t);
     makefile.AddDefinition(value, expandedArgs[t]);
     makefile.MarkVariableAsUsed(value);
   }
@@ -89,9 +90,10 @@ bool cmFunctionHelperCommand::operator()(
   }
 
   // define ARGV and ARGN
-  auto const argvDef = cmJoin(expandedArgs, ";");
-  auto const eit = expandedArgs.begin() + (this->Args.size() - 1);
-  auto const argnDef = cmJoin(cmMakeRange(eit, expandedArgs.end()), ";");
+  auto const argvDef = cmList::to_string(expandedArgs);
+  auto const expIt = expandedArgs.begin() + (this->Args.size() - 1);
+  auto const argnDef =
+    cmList::to_string(cmMakeRange(expIt, expandedArgs.end()));
   makefile.AddDefinition(ARGV, argvDef);
   makefile.MarkVariableAsUsed(ARGV);
   makefile.AddDefinition(ARGN, argnDef);
@@ -121,6 +123,10 @@ bool cmFunctionHelperCommand::operator()(
     }
     if (status.GetReturnInvoked()) {
       makefile.RaiseScope(status.GetReturnVariables());
+      break;
+    }
+    if (status.HasExitCode()) {
+      inStatus.SetExitCode(status.GetExitCode());
       break;
     }
   }

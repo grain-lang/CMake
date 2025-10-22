@@ -1,17 +1,19 @@
 /* Distributed under the OSI-approved BSD 3-Clause License.  See accompanying
-   file Copyright.txt or https://cmake.org/licensing for details.  */
+   file LICENSE.rst or https://cmake.org/licensing for details.  */
 #pragma once
 
 #include "cmConfigure.h" // IWYU pragma: keep
 
 #include <iosfwd>
 #include <string>
+#include <vector>
 
 #include "cmProcessOutput.h"
 #include "cmProcessTools.h"
 
 class cmCTest;
 class cmXMLWriter;
+class cmMakefile;
 
 /** \class cmCTestVC
  * \brief Base class for version control system handlers
@@ -21,7 +23,7 @@ class cmCTestVC : public cmProcessTools
 {
 public:
   /** Construct with a CTest instance and update log stream.  */
-  cmCTestVC(cmCTest* ctest, std::ostream& log);
+  cmCTestVC(cmCTest* ctest, cmMakefile* mf, std::ostream& log);
 
   virtual ~cmCTestVC();
 
@@ -35,7 +37,7 @@ public:
   std::string GetNightlyTime();
 
   /** Prepare the work tree.  */
-  bool InitialCheckout(const std::string& command);
+  bool InitialCheckout(std::string const& command);
 
   /** Perform cleanup operations on the work tree.  */
   void Cleanup();
@@ -108,15 +110,15 @@ protected:
   };
 
   /** Convert a list of arguments to a human-readable command line.  */
-  static std::string ComputeCommandLine(char const* const* cmd);
+  static std::string ComputeCommandLine(std::vector<std::string> const& cmd);
 
   /** Run a command line and send output to given parsers.  */
-  bool RunChild(char const* const* cmd, OutputParser* out, OutputParser* err,
-                const char* workDir = nullptr,
+  bool RunChild(std::vector<std::string> const& cmd, OutputParser* out,
+                OutputParser* err, std::string workDir = {},
                 Encoding encoding = cmProcessOutput::Auto);
 
   /** Run VC update command line and send output to given parsers.  */
-  bool RunUpdateCommand(char const* const* cmd, OutputParser* out,
+  bool RunUpdateCommand(std::vector<std::string> const& cmd, OutputParser* out,
                         OutputParser* err = nullptr,
                         Encoding encoding = cmProcessOutput::Auto);
 
@@ -127,6 +129,7 @@ protected:
 
   // Instance of cmCTest running the script.
   cmCTest* CTest;
+  cmMakefile* Makefile;
 
   // A stream to which we write log information.
   std::ostream& Log;

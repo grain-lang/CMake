@@ -8,7 +8,7 @@ readonly name="curl"
 readonly ownership="Curl Upstream <curl-library@lists.haxx.se>"
 readonly subtree="Utilities/cmcurl"
 readonly repo="https://github.com/curl/curl.git"
-readonly tag="curl-8_1_2"
+readonly tag="curl-8_14_1"
 readonly shortlog=false
 readonly paths="
   CMake/*
@@ -21,6 +21,8 @@ readonly paths="
   lib/Makefile.inc
   lib/curl_config.h.cmake
   lib/libcurl.rc
+  lib/curlx/*.c
+  lib/curlx/*.h
   lib/vauth/*.c
   lib/vauth/*.h
   lib/vquic/*.c
@@ -35,15 +37,6 @@ extract_source () {
     git_archive
     pushd "${extractdir}/${name}-reduced"
     rm lib/config-*.h
-    chmod a-x lib/connect.c
-    for f in \
-      lib/cookie.c \
-      lib/krb5.c \
-      lib/security.c \
-      ; do
-        iconv -f LATIN1 -t UTF8 $f -o $f.utf-8
-        mv $f.utf-8 $f
-    done
     echo "* -whitespace" > .gitattributes
     popd
 }

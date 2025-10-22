@@ -1,5 +1,5 @@
 /* Distributed under the OSI-approved BSD 3-Clause License.  See accompanying
-   file Copyright.txt or https://cmake.org/licensing for details.  */
+   file LICENSE.rst or https://cmake.org/licensing for details.  */
 #include "cmPlaceholderExpander.h"
 
 #include <cctype>
@@ -48,6 +48,10 @@ std::string& cmPlaceholderExpander::ExpandVariables(std::string& s)
   }
   // add the rest of the input
   expandedInput += s.substr(pos, s.size() - pos);
+  // remove trailing whitespace
+  if (!expandedInput.empty() && expandedInput.back() == ' ') {
+    expandedInput.pop_back();
+  }
   s = expandedInput;
 
   return s;

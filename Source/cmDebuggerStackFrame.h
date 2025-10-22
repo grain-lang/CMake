@@ -1,5 +1,5 @@
 /* Distributed under the OSI-approved BSD 3-Clause License.  See accompanying
-   file Copyright.txt or https://cmake.org/licensing for details.  */
+   file LICENSE.rst or https://cmake.org/licensing for details.  */
 #pragma once
 
 #include "cmConfigure.h" // IWYU pragma: keep
@@ -7,8 +7,10 @@
 #include <atomic>
 #include <cstdint>
 #include <string>
+#include <vector>
 
 class cmListFileFunction;
+struct cmListFileArgument;
 class cmMakefile;
 
 namespace cmDebugger {
@@ -28,6 +30,11 @@ public:
   std::string const& GetFileName() const noexcept { return this->FileName; }
   int64_t GetLine() const noexcept;
   cmMakefile* GetMakefile() const noexcept { return this->Makefile; }
+  cmListFileFunction const& GetFunction() const noexcept
+  {
+    return this->Function;
+  }
+  std::vector<cmListFileArgument> const& GetArguments() const noexcept;
 };
 
 } // namespace cmDebugger

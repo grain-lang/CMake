@@ -1,15 +1,17 @@
 /* Distributed under the OSI-approved BSD 3-Clause License.  See accompanying
-   file Copyright.txt or https://cmake.org/licensing for details.  */
+   file LICENSE.rst or https://cmake.org/licensing for details.  */
 #include "cmCommonTargetGenerator.h"
 
 #include <algorithm>
 #include <sstream>
+#include <type_traits>
 #include <utility>
 
 #include <cm/string_view>
 #include <cmext/string_view>
 
 #include "cmComputeLinkInformation.h"
+#include "cmGenExContext.h"
 #include "cmGeneratorExpression.h"
 #include "cmGeneratorExpressionDAGChecker.h"
 #include "cmGeneratorTarget.h"
@@ -47,8 +49,8 @@ std::vector<std::string> const& cmCommonTargetGenerator::GetConfigNames() const
   return this->ConfigNames;
 }
 
-cmValue cmCommonTargetGenerator::GetFeature(const std::string& feature,
-                                            const std::string& config)
+cmValue cmCommonTargetGenerator::GetFeature(std::string const& feature,
+                                            std::string const& config)
 {
   return this->GeneratorTarget->GetFeature(feature, config);
 }
@@ -56,7 +58,7 @@ cmValue cmCommonTargetGenerator::GetFeature(const std::string& feature,
 void cmCommonTargetGenerator::AppendFortranFormatFlags(
   std::string& flags, cmSourceFile const& source)
 {
-  const std::string srcfmt = source.GetSafeProperty("Fortran_FORMAT");
+  std::string const srcfmt = source.GetSafeProperty("Fortran_FORMAT");
   cmOutputConverter::FortranFormat format =
     cmOutputConverter::GetFortranFormat(srcfmt);
   if (format == cmOutputConverter::FortranFormatNone) {
@@ -64,7 +66,7 @@ void cmCommonTargetGenerator::AppendFortranFormatFlags(
       this->GeneratorTarget->GetSafeProperty("Fortran_FORMAT");
     format = cmOutputConverter::GetFortranFormat(tgtfmt);
   }
-  const char* var = nullptr;
+  char const* var = nullptr;
   switch (format) {
     case cmOutputConverter::FortranFormatFixed:
       var = "CMAKE_Fortran_FORMAT_FIXED_FLAG";
@@ -85,7 +87,7 @@ void cmCommonTargetGenerator::AppendFortranPreprocessFlags(
   std::string& flags, cmSourceFile const& source,
   PreprocessFlagsRequired requires_pp)
 {
-  const std::string srcpp = source.GetSafeProperty("Fortran_PREPROCESS");
+  std::string const srcpp = source.GetSafeProperty("Fortran_PREPROCESS");
   cmOutputConverter::FortranPreprocess preprocess =
     cmOutputConverter::GetFortranPreprocess(srcpp);
   if (preprocess == cmOutputConverter::FortranPreprocess::Unset) {
@@ -93,7 +95,7 @@ void cmCommonTargetGenerator::AppendFortranPreprocessFlags(
       this->GeneratorTarget->GetSafeProperty("Fortran_PREPROCESS");
     preprocess = cmOutputConverter::GetFortranPreprocess(tgtpp);
   }
-  const char* var = nullptr;
+  char const* var = nullptr;
   switch (preprocess) {
     case cmOutputConverter::FortranPreprocess::Needed:
       if (requires_pp == PreprocessFlagsRequired::YES) {
@@ -112,11 +114,11 @@ void cmCommonTargetGenerator::AppendFortranPreprocessFlags(
   }
 }
 
-std::string cmCommonTargetGenerator::GetFlags(const std::string& l,
-                                              const std::string& config,
-                                              const std::string& arch)
+std::string cmCommonTargetGenerator::GetFlags(std::string const& l,
+                                              std::string const& config,
+                                              std::string const& arch)
 {
-  const std::string key = config + arch;
+  std::string const key = config + arch;
 
   auto i = this->Configs[key].FlagsByLanguage.find(l);
   if (i == this->Configs[key].FlagsByLanguage.end()) {
@@ -131,8 +133,8 @@ std::string cmCommonTargetGenerator::GetFlags(const std::string& l,
   return i->second;
 }
 
-std::string cmCommonTargetGenerator::GetDefines(const std::string& l,
-                                                const std::string& config)
+std::string cmCommonTargetGenerator::GetDefines(std::string const& l,
+                                                std::string const& config)
 {
   auto i = this->Configs[config].DefinesByLanguage.find(l);
   if (i == this->Configs[config].DefinesByLanguage.end()) {
@@ -150,7 +152,7 @@ std::string cmCommonTargetGenerator::GetDefines(const std::string& l,
 }
 
 std::string cmCommonTargetGenerator::GetIncludes(std::string const& l,
-                                                 const std::string& config)
+                                                 std::string const& config)
 {
   auto i = this->Configs[config].IncludesByLanguage.find(l);
   if (i == this->Configs[config].IncludesByLanguage.end()) {
@@ -162,43 +164,75 @@ std::string cmCommonTargetGenerator::GetIncludes(std::string const& l,
   return i->second;
 }
 
-std::vector<std::string> cmCommonTargetGenerator::GetLinkedTargetDirectories(
-  const std::string& lang, const std::string& config) const
+cmCommonTargetGenerator::LinkedTargetDirs
+cmCommonTargetGenerator::GetLinkedTargetDirectories(
+  std::string const& lang, std::string const& config) const
 {
-  std::vector<std::string> dirs;
-  std::set<cmGeneratorTarget const*> emitted;
+  LinkedTargetDirs dirs;
+  std::set<cmGeneratorTarget const*> forward_emitted;
+  std::set<cmGeneratorTarget const*> direct_emitted;
   cmGlobalCommonGenerator* const gg = this->GlobalCommonGenerator;
+
+  enum class Forwarding
+  {
+    Yes,
+    No
+  };
+
   if (cmComputeLinkInformation* cli =
         this->GeneratorTarget->GetLinkInformation(config)) {
-    std::vector<cmGeneratorTarget const*> targets;
-    for (auto const& item : cli->GetItems()) {
-      targets.push_back(item.Target);
-    }
-    for (auto const* target : cli->GetObjectLibrariesLinked()) {
-      targets.push_back(target);
-    }
-
-    for (auto const* linkee : targets) {
-      if (linkee &&
-          !linkee->IsImported()
-          // Skip targets that build after this one in a static lib cycle.
-          && gg->TargetOrderIndexLess(linkee, this->GeneratorTarget)
-          // We can ignore the INTERFACE_LIBRARY items because
-          // Target->GetLinkInformation already processed their
-          // link interface and they don't have any output themselves.
-          && (linkee->GetType() != cmStateEnums::INTERFACE_LIBRARY
-              // Synthesized targets may have relevant rules.
-              || linkee->IsSynthetic()) &&
-          ((lang == "CXX"_s && linkee->HaveCxx20ModuleSources()) ||
-           (lang == "Fortran"_s && linkee->HaveFortranSources(config))) &&
-          emitted.insert(linkee).second) {
-        cmLocalGenerator* lg = linkee->GetLocalGenerator();
-        std::string di = cmStrCat(lg->GetCurrentBinaryDirectory(), '/',
-                                  lg->GetTargetDirectory(linkee));
-        if (lg->GetGlobalGenerator()->IsMultiConfig()) {
-          di = cmStrCat(di, '/', config);
+    auto addLinkedTarget =
+      [this, &lang, &config, &dirs, &direct_emitted, &forward_emitted,
+       gg](cmGeneratorTarget const* linkee, Forwarding forward) {
+        if (linkee &&
+            !linkee->IsImported()
+            // Skip targets that build after this one in a static lib cycle.
+            && gg->TargetOrderIndexLess(linkee, this->GeneratorTarget)
+            // We can ignore the INTERFACE_LIBRARY items because
+            // Target->GetLinkInformation already processed their
+            // link interface and they don't have any output themselves.
+            && (linkee->GetType() != cmStateEnums::INTERFACE_LIBRARY
+                // Synthesized targets may have relevant rules.
+                || linkee->IsSynthetic()) &&
+            ((lang == "CXX"_s && linkee->HaveCxx20ModuleSources()) ||
+             (lang == "Fortran"_s && linkee->HaveFortranSources(config)))) {
+          cmLocalGenerator* lg = linkee->GetLocalGenerator();
+          std::string di = linkee->GetSupportDirectory();
+          if (lg->GetGlobalGenerator()->IsMultiConfig()) {
+            di = cmStrCat(di, '/', config);
+          }
+          if (forward == Forwarding::Yes &&
+              forward_emitted.insert(linkee).second) {
+            dirs.Forward.push_back(di);
+          }
+          if (direct_emitted.insert(linkee).second) {
+            dirs.Direct.emplace_back(di);
+          }
         }
-        dirs.push_back(std::move(di));
+      };
+    for (auto const& item : cli->GetItems()) {
+      if (item.Target) {
+        addLinkedTarget(item.Target, Forwarding::No);
+      } else if (item.ObjectSource && lang == "Fortran"_s
+                 /* Object source files do not have a language associated with
+                    them. */
+                 /* && item.ObjectSource->GetLanguage() == "Fortran"_s*/) {
+        // Fortran modules provided by `$<TARGET_OBJECTS>` as linked items
+        // should be collated for use in this target.
+        addLinkedTarget(this->LocalCommonGenerator->FindGeneratorTargetToUse(
+                          item.ObjectSource->GetObjectLibrary()),
+                        Forwarding::Yes);
+      }
+    }
+    for (cmGeneratorTarget const* target : cli->GetExternalObjectTargets()) {
+      addLinkedTarget(target, Forwarding::No);
+    }
+    if (lang == "Fortran"_s) {
+      // Fortran modules provided by `$<TARGET_OBJECTS>` as sources should be
+      // collated for use in this target.
+      for (cmGeneratorTarget const* target :
+           this->GeneratorTarget->GetSourceObjectLibraries(config)) {
+        addLinkedTarget(target, Forwarding::Yes);
       }
     }
   }
@@ -206,7 +240,7 @@ std::vector<std::string> cmCommonTargetGenerator::GetLinkedTargetDirectories(
 }
 
 std::string cmCommonTargetGenerator::ComputeTargetCompilePDB(
-  const std::string& config) const
+  std::string const& config) const
 {
   std::string compilePdbPath;
   if (this->GeneratorTarget->GetType() > cmStateEnums::OBJECT_LIBRARY) {
@@ -233,7 +267,7 @@ std::string cmCommonTargetGenerator::ComputeTargetCompilePDB(
   return compilePdbPath;
 }
 
-std::string cmCommonTargetGenerator::GetManifests(const std::string& config)
+std::string cmCommonTargetGenerator::GetManifests(std::string const& config)
 {
   std::vector<cmSourceFile const*> manifest_srcs;
   this->GeneratorTarget->GetManifests(manifest_srcs, config);
@@ -261,7 +295,7 @@ std::string cmCommonTargetGenerator::GetAIXExports(std::string const&)
   if (this->GeneratorTarget->IsAIX()) {
     if (cmValue exportAll =
           this->GeneratorTarget->GetProperty("AIX_EXPORT_ALL_SYMBOLS")) {
-      if (cmIsOff(*exportAll)) {
+      if (exportAll.IsOff()) {
         aixExports = "-n";
       }
     }
@@ -270,8 +304,8 @@ std::string cmCommonTargetGenerator::GetAIXExports(std::string const&)
 }
 
 void cmCommonTargetGenerator::AppendOSXVerFlag(std::string& flags,
-                                               const std::string& lang,
-                                               const char* name, bool so)
+                                               std::string const& lang,
+                                               char const* name, bool so)
 {
   // Lookup the flag to specify the version.
   std::string fvar = cmStrCat("CMAKE_", lang, "_OSX_", name, "_VERSION_FLAG");
@@ -326,6 +360,7 @@ std::string cmCommonTargetGenerator::GenerateCodeCheckRules(
   std::string iwyu;
   std::string cpplint;
   std::string cppcheck;
+  std::string icstat;
 
   auto evaluateProp = [&](std::string const& prop) -> std::string {
     auto const value = this->GeneratorTarget->GetProperty(prop);
@@ -335,10 +370,7 @@ std::string cmCommonTargetGenerator::GenerateCodeCheckRules(
     auto evaluatedProp = cmGeneratorExpression::Evaluate(
       *value, this->GeneratorTarget->GetLocalGenerator(), config,
       this->GeneratorTarget, nullptr, this->GeneratorTarget, lang);
-    if (!evaluatedProp.empty()) {
-      return evaluatedProp;
-    }
-    return *value;
+    return evaluatedProp;
   };
   std::string const tidy_prop = cmStrCat(lang, "_CLANG_TIDY");
   tidy = evaluateProp(tidy_prop);
@@ -352,9 +384,12 @@ std::string cmCommonTargetGenerator::GenerateCodeCheckRules(
 
     std::string const cppcheck_prop = cmStrCat(lang, "_CPPCHECK");
     cppcheck = evaluateProp(cppcheck_prop);
+
+    std::string const icstat_prop = cmStrCat(lang, "_ICSTAT");
+    icstat = evaluateProp(icstat_prop);
   }
   if (cmNonempty(iwyu) || cmNonempty(tidy) || cmNonempty(cpplint) ||
-      cmNonempty(cppcheck)) {
+      cmNonempty(cppcheck) || cmNonempty(icstat)) {
     std::string code_check = cmakeCmd + " -E __run_co_compile";
     if (!compilerLauncher.empty()) {
       // In __run_co_compile case the launcher command is supplied
@@ -429,7 +464,7 @@ std::string cmCommonTargetGenerator::GenerateCodeCheckRules(
           this->GlobalCommonGenerator->AddClangTidyExportFixesFile(fixesFile);
           cmSystemTools::MakeDirectory(
             cmSystemTools::GetFilenamePath(fixesFile));
-          if (!pathConverter) {
+          if (pathConverter) {
             fixesFile = pathConverter(fixesFile);
           }
           exportFixes = cmStrCat(";--export-fixes=", fixesFile);
@@ -450,6 +485,24 @@ std::string cmCommonTargetGenerator::GenerateCodeCheckRules(
       code_check +=
         this->GeneratorTarget->GetLocalGenerator()->EscapeForShell(cppcheck);
     }
+    if (cmNonempty(icstat)) {
+      code_check += " --icstat=";
+      std::string checksParam{};
+      std::string dbParam{};
+      // Set default values for mandatory parameters
+      std::string checksFile{ "cstat_sel_checks.txt" };
+      std::string dbFile{ "cstat.db" };
+      // Populate the command line with C-STAT
+      // mandatory parameters unless specified
+      if (icstat.find("--checks=") == std::string::npos) {
+        checksParam = cmStrCat(";--checks=", checksFile);
+      }
+      if (icstat.find("--db=") == std::string::npos) {
+        dbParam = cmStrCat(";--db=", dbFile);
+      }
+      code_check += this->GeneratorTarget->GetLocalGenerator()->EscapeForShell(
+        cmStrCat(icstat, checksParam, dbParam));
+    }
     if (cmNonempty(tidy) || (cmNonempty(cpplint)) || (cmNonempty(cppcheck))) {
       code_check += " --source=";
       code_check +=
@@ -463,17 +516,19 @@ std::string cmCommonTargetGenerator::GenerateCodeCheckRules(
 }
 
 std::string cmCommonTargetGenerator::GetLinkerLauncher(
-  const std::string& config)
+  std::string const& config)
 {
   std::string lang = this->GeneratorTarget->GetLinkerLanguage(config);
   std::string propName = lang + "_LINKER_LAUNCHER";
   cmValue launcherProp = this->GeneratorTarget->GetProperty(propName);
   if (cmNonempty(launcherProp)) {
-    cmGeneratorExpressionDAGChecker dagChecker(this->GeneratorTarget, propName,
-                                               nullptr, nullptr);
+    cm::GenEx::Context context(this->LocalCommonGenerator, config, lang);
+    cmGeneratorExpressionDAGChecker dagChecker{ this->GeneratorTarget,
+                                                propName, nullptr, nullptr,
+                                                context };
     std::string evaluatedLinklauncher = cmGeneratorExpression::Evaluate(
-      *launcherProp, this->LocalCommonGenerator, config, this->GeneratorTarget,
-      &dagChecker, this->GeneratorTarget, lang);
+      *launcherProp, context.LG, context.Config, this->GeneratorTarget,
+      &dagChecker, this->GeneratorTarget, context.Language);
     // Convert ;-delimited list to single string
     cmList args{ evaluatedLinklauncher, cmList::EmptyElements::Yes };
     if (!args.empty()) {
@@ -489,7 +544,7 @@ std::string cmCommonTargetGenerator::GetLinkerLauncher(
 }
 
 bool cmCommonTargetGenerator::HaveRequiredLanguages(
-  const std::vector<cmSourceFile const*>& sources,
+  std::vector<cmSourceFile const*> const& sources,
   std::set<std::string>& languagesNeeded) const
 {
   for (cmSourceFile const* sf : sources) {
@@ -498,8 +553,8 @@ bool cmCommonTargetGenerator::HaveRequiredLanguages(
 
   auto* makefile = this->Makefile;
   auto* state = makefile->GetState();
-  auto unary = [&state, &makefile](const std::string& lang) -> bool {
-    const bool valid = state->GetLanguageEnabled(lang);
+  auto unary = [&state, &makefile](std::string const& lang) -> bool {
+    bool const valid = state->GetLanguageEnabled(lang);
     if (!valid) {
       makefile->IssueMessage(
         MessageType::FATAL_ERROR,

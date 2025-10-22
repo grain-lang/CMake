@@ -1,5 +1,5 @@
 /* Distributed under the OSI-approved BSD 3-Clause License.  See accompanying
-   file Copyright.txt or https://cmake.org/licensing for details.  */
+   file LICENSE.rst or https://cmake.org/licensing for details.  */
 #include "cmCPackNuGetGenerator.h"
 
 #include <algorithm>
@@ -12,7 +12,7 @@
 
 #include "cmCPackComponentGroup.h"
 #include "cmCPackLog.h"
-#include "cmStringAlgorithms.h"
+#include "cmList.h"
 #include "cmSystemTools.h"
 #include "cmValue.h"
 
@@ -82,17 +82,17 @@ void cmCPackNuGetGenerator::SetupGroupComponentVariables(bool ignoreGroup)
                      std::back_inserter(components),
                      [](cmCPackComponent const* comp) { return comp->Name; });
       this->SetOption("CPACK_NUGET_" + compGUp + "_GROUP_COMPONENTS",
-                      cmJoin(components, ";"));
+                      cmList::to_string(components));
     }
     if (!groups.empty()) {
-      this->SetOption("CPACK_NUGET_GROUPS", cmJoin(groups, ";"));
+      this->SetOption("CPACK_NUGET_GROUPS", cmList::to_string(groups));
     }
 
     // Handle Orphan components (components not belonging to any groups)
     std::vector<std::string> components;
     for (auto const& comp : this->Components) {
       // Does the component belong to a group?
-      if (comp.second.Group == nullptr) {
+      if (!comp.second.Group) {
         cmCPackLogger(
           cmCPackLog::LOG_VERBOSE,
           "Component <"
@@ -103,7 +103,7 @@ void cmCPackNuGetGenerator::SetupGroupComponentVariables(bool ignoreGroup)
       }
     }
     if (!components.empty()) {
-      this->SetOption("CPACK_NUGET_COMPONENTS", cmJoin(components, ";"));
+      this->SetOption("CPACK_NUGET_COMPONENTS", cmList::to_string(components));
     }
 
   } else {
@@ -114,7 +114,7 @@ void cmCPackNuGetGenerator::SetupGroupComponentVariables(bool ignoreGroup)
                    [](std::pair<std::string, cmCPackComponent> const& comp) {
                      return comp.first;
                    });
-    this->SetOption("CPACK_NUGET_COMPONENTS", cmJoin(components, ";"));
+    this->SetOption("CPACK_NUGET_COMPONENTS", cmList::to_string(components));
   }
 }
 
@@ -129,8 +129,8 @@ void cmCPackNuGetGenerator::AddGeneratedPackageNames()
     return;
   }
   // add the generated packages to package file names list
-  const std::string& fileNames = *files_list;
-  const char sep = ';';
+  std::string const& fileNames = *files_list;
+  char const sep = ';';
   std::string::size_type pos1 = 0;
   std::string::size_type pos2 = fileNames.find(sep, pos1 + 1);
   while (pos2 != std::string::npos) {

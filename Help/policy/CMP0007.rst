@@ -1,6 +1,9 @@
 CMP0007
 -------
 
+.. |REMOVED_IN_CMAKE_VERSION| replace:: 4.0
+.. include:: include/REMOVED_PROLOGUE.rst
+
 list command no longer ignores empty elements.
 
 This policy determines whether the list command will ignore empty
@@ -10,8 +13,6 @@ and not 4.  The ``OLD`` behavior for this policy is to ignore empty list
 elements.  The ``NEW`` behavior for this policy is to correctly count
 empty elements in a list.
 
-This policy was introduced in CMake version 2.6.0.  CMake version
-|release| warns when the policy is not set and uses ``OLD`` behavior.  Use
-the :command:`cmake_policy` command to set it to ``OLD`` or ``NEW`` explicitly.
-
-.. include:: DEPRECATED.txt
+.. |INTRODUCED_IN_CMAKE_VERSION| replace:: 2.6.0
+.. |WARNED_OR_DID_NOT_WARN| replace:: warned
+.. include:: include/REMOVED_EPILOGUE.rst

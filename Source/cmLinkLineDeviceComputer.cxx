@@ -1,5 +1,5 @@
 /* Distributed under the OSI-approved BSD 3-Clause License.  See accompanying
-   file Copyright.txt or https://cmake.org/licensing for details.  */
+   file LICENSE.rst or https://cmake.org/licensing for details.  */
 
 #include "cmLinkLineDeviceComputer.h"
 
@@ -101,9 +101,7 @@ void cmLinkLineDeviceComputer::ComputeLinkLibraries(
   ItemVector const& items = cli.GetItems();
   std::string config = cli.GetConfig();
   bool skipItemAfterFramework = false;
-  // Note:
-  // Any modification of this algorithm should be reflected also in
-  // cmVisualStudio10TargetGenerator::ComputeCudaLinkOptions
+
   for (auto const& item : items) {
     if (skipItemAfterFramework) {
       skipItemAfterFramework = false;
@@ -115,6 +113,7 @@ void cmLinkLineDeviceComputer::ComputeLinkLibraries(
       switch (item.Target->GetType()) {
         case cmStateEnums::SHARED_LIBRARY:
         case cmStateEnums::MODULE_LIBRARY:
+        case cmStateEnums::OBJECT_LIBRARY:
         case cmStateEnums::INTERFACE_LIBRARY:
           skip = true;
           break;
@@ -131,11 +130,13 @@ void cmLinkLineDeviceComputer::ComputeLinkLibraries(
 
     BT<std::string> linkLib;
     if (item.IsPath == cmComputeLinkInformation::ItemIsPath::Yes) {
-      // nvcc understands absolute paths to libraries ending in '.a' or '.lib'.
-      // These should be passed to nvlink.  Other extensions need to be left
-      // out because nvlink may not understand or need them.  Even though it
-      // can tolerate '.so' or '.dylib' it cannot tolerate '.so.1'.
-      if (cmHasLiteralSuffix(item.Value.Value, ".a") ||
+      // nvcc understands absolute paths to libraries ending in '.o', .a', or
+      // '.lib'. These should be passed to nvlink.  Other extensions need to be
+      // left out because nvlink may not understand or need them.  Even though
+      // it can tolerate '.so' or '.dylib' it cannot tolerate '.so.1'.
+      if (cmHasLiteralSuffix(item.Value.Value, ".o") ||
+          cmHasLiteralSuffix(item.Value.Value, ".obj") ||
+          cmHasLiteralSuffix(item.Value.Value, ".a") ||
           cmHasLiteralSuffix(item.Value.Value, ".lib")) {
         linkLib.Value = item
                           .GetFormattedItem(this->ConvertToOutputFormat(
@@ -154,12 +155,12 @@ void cmLinkLineDeviceComputer::ComputeLinkLibraries(
     if (emitted.insert(linkLib.Value).second) {
       linkLib.Value += " ";
 
-      const cmLinkImplementation* linkImpl =
-        cli.GetTarget()->GetLinkImplementation(
-          cli.GetConfig(), cmGeneratorTarget::LinkInterfaceFor::Link);
+      cmLinkImplementation const* linkImpl =
+        cli.GetTarget()->GetLinkImplementation(cli.GetConfig(),
+                                               cmGeneratorTarget::UseTo::Link);
 
-      for (const cmLinkImplItem& iter : linkImpl->Libraries) {
-        if (iter.Target != nullptr &&
+      for (cmLinkImplItem const& iter : linkImpl->Libraries) {
+        if (iter.Target &&
             iter.Target->GetType() != cmStateEnums::INTERFACE_LIBRARY) {
           std::string libPath = iter.Target->GetLocation(cli.GetConfig());
           if (item.Value == libPath) {
@@ -185,7 +186,7 @@ std::string cmLinkLineDeviceComputer::GetLinkerLanguage(cmGeneratorTarget*,
 }
 
 bool requireDeviceLinking(cmGeneratorTarget& target, cmLocalGenerator& lg,
-                          const std::string& config)
+                          std::string const& config)
 {
   if (!target.GetGlobalGenerator()->GetLanguageEnabled("CUDA")) {
     return false;
@@ -203,7 +204,7 @@ bool requireDeviceLinking(cmGeneratorTarget& target, cmLocalGenerator& lg,
         target.GetProperty("CUDA_RESOLVE_DEVICE_SYMBOLS")) {
     // If CUDA_RESOLVE_DEVICE_SYMBOLS has been explicitly set we need
     // to honor the value no matter what it is.
-    return cmIsOn(*resolveDeviceSymbols);
+    return resolveDeviceSymbols.IsOn();
   }
 
   // Determine if we have any dependencies that require
@@ -212,7 +213,7 @@ bool requireDeviceLinking(cmGeneratorTarget& target, cmLocalGenerator& lg,
     target.GetLinkClosure(config);
 
   if (cm::contains(closure->Languages, "CUDA")) {
-    if (cmIsOn(target.GetProperty("CUDA_SEPARABLE_COMPILATION"))) {
+    if (target.GetProperty("CUDA_SEPARABLE_COMPILATION").IsOn()) {
       bool doDeviceLinking = false;
       switch (target.GetType()) {
         case cmStateEnums::SHARED_LIBRARY:

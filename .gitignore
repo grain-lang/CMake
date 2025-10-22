@@ -1,7 +1,14 @@
+# Help tools that honor '.gitignore' (redundant for Git itself).
+/.git
+
 /CMakeUserPresets.json
 
 # Common build directories
 /build*/
+
+# CI jobs that run in symlinked trees produce these artifacts.
+/real_work/
+/work
 
 # MacOS Finder files.
 .DS_Store
@@ -29,6 +36,10 @@
 # Visual Studio build directory
 /out/
 
+# clang-tidy output
+/clang-tidy-fixes.patch
+
+# esy
 Bootstrap.cmk
 _esy
 node_modules

@@ -1,6 +1,8 @@
 /* Distributed under the OSI-approved BSD 3-Clause License.  See accompanying
-   file Copyright.txt or https://cmake.org/licensing for details.  */
+   file LICENSE.rst or https://cmake.org/licensing for details.  */
 #include "cmLocalVisualStudio10Generator.h"
+
+#include <cmext/string_view>
 
 #include <cm3p/expat.h>
 
@@ -18,8 +20,8 @@ class cmGeneratorTarget;
 class cmVS10XMLParser : public cmXMLParser
 {
 public:
-  void EndElement(const std::string& /* name */) override {}
-  void CharacterDataHandler(const char* data, int length) override
+  void EndElement(std::string const& /* name */) override {}
+  void CharacterDataHandler(char const* data, int length) override
   {
     if (this->DoGUID) {
       if (data[0] == '{') {
@@ -31,13 +33,13 @@ public:
       this->DoGUID = false;
     }
   }
-  void StartElement(const std::string& name, const char**) override
+  void StartElement(std::string const& name, char const**) override
   {
     // once the GUID is found do nothing
     if (!this->GUID.empty()) {
       return;
     }
-    if ("ProjectGUID" == name || "ProjectGuid" == name) {
+    if (name == "ProjectGUID"_s || name == "ProjectGuid"_s) {
       this->DoGUID = true;
     }
   }
@@ -80,7 +82,7 @@ void cmLocalVisualStudio10Generator::GenerateTarget(cmGeneratorTarget* target)
 }
 
 void cmLocalVisualStudio10Generator::ReadAndStoreExternalGUID(
-  const std::string& name, const char* path)
+  std::string const& name, char const* path)
 {
   cmVS10XMLParser parser;
   parser.ParseFile(path);
@@ -93,10 +95,10 @@ void cmLocalVisualStudio10Generator::ReadAndStoreExternalGUID(
   std::string guidStoreName = cmStrCat(name, "_GUID_CMAKE");
   // save the GUID in the cache
   this->GlobalGenerator->GetCMakeInstance()->AddCacheEntry(
-    guidStoreName, parser.GUID.c_str(), "Stored GUID", cmStateEnums::INTERNAL);
+    guidStoreName, parser.GUID, "Stored GUID", cmStateEnums::INTERNAL);
 }
 
-const char* cmLocalVisualStudio10Generator::ReportErrorLabel() const
+char const* cmLocalVisualStudio10Generator::ReportErrorLabel() const
 {
   return ":VCEnd";
 }

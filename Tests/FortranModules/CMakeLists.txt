@@ -1,4 +1,4 @@
-cmake_minimum_required (VERSION 3.9)
+cmake_minimum_required(VERSION 3.10)
 project(FortranModules Fortran)
 
 if("${CMAKE_Fortran_COMPILER_ID};${CMAKE_Fortran_SIMULATE_ID}" MATCHES "^Intel(LLVM)?;MSVC$")
@@ -10,11 +10,16 @@ if(NOT DEFINED CMake_TEST_NESTED_MAKE_PROGRAM AND NOT CMAKE_GENERATOR MATCHES "V
   set(CMake_TEST_NESTED_MAKE_PROGRAM "${CMAKE_MAKE_PROGRAM}")
 endif()
 
-if("x${CMake_TEST_Fortran_SUBMODULES}" STREQUAL "x"
-    AND NOT CMAKE_VERSION VERSION_LESS 3.6.20160923 # for CheckFortranSourceCompiles SRC_EXT
-    )
+if(NOT DEFINED CMake_TEST_Fortran_SUBMODULES AND (
+    # FIXME(#18925): We do not support Cray's module file names.
+    CMAKE_Fortran_COMPILER_ID STREQUAL "Cray"
+    ))
+  set(CMake_TEST_Fortran_SUBMODULES 0)
+endif()
+
+if(NOT DEFINED CMake_TEST_Fortran_SUBMODULES)
   include(CheckFortranSourceCompiles)
-  CHECK_Fortran_SOURCE_COMPILES([[
+  check_fortran_source_compiles([[
 module parent
   interface
     module function id(x)
@@ -67,7 +72,7 @@ add_definitions(-DFOO -DBAR=1)
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/include)
 add_executable(test_preprocess test_preprocess.F90 test_preprocess_module.F90)
 
-add_executable(test_non_pp_include test_non_pp_include_main.f90)
+add_executable(test_non_pp_include test_non_pp_include_main.f90 test_non_pp_include_module.f90)
 
 # Build the external project separately using a custom target.
 # Make sure it uses the same build configuration as this test.
@@ -125,3 +130,21 @@ add_subdirectory(Executable)
 if(CMake_TEST_Fortran_SUBMODULES)
   add_subdirectory(Submodules)
 endif()
+
+add_subdirectory(Issue25112)
+add_subdirectory(Issue25223)
+if( # Intel Fortran VS Integration breaks on custom targets with Fortran sources
+    NOT CMAKE_GENERATOR MATCHES "Visual Studio")
+  add_subdirectory(Issue25252)
+  add_subdirectory(Issue25252-iface-target)
+endif()
+add_subdirectory(Issue25252-iface-sources)
+
+add_subdirectory(Issue25365-target-objects)
+add_subdirectory(Issue25365-target-objects-iface)
+
+# Issue#25425
+add_subdirectory(ModulesViaTargetObjectsSource)
+add_subdirectory(ModulesViaSubdirTargetObjectsSource)
+add_subdirectory(ModulesViaTargetObjectsLink)
+add_subdirectory(ModulesViaSubdirTargetObjectsLink)

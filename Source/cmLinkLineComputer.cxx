@@ -1,5 +1,5 @@
 /* Distributed under the OSI-approved BSD 3-Clause License.  See accompanying
-   file Copyright.txt or https://cmake.org/licensing for details.  */
+   file LICENSE.rst or https://cmake.org/licensing for details.  */
 
 #include "cmLinkLineComputer.h"
 
@@ -9,6 +9,7 @@
 
 #include "cmComputeLinkInformation.h"
 #include "cmGeneratorTarget.h"
+#include "cmList.h"
 #include "cmListFileCache.h"
 #include "cmOutputConverter.h"
 #include "cmStateTypes.h"
@@ -65,7 +66,8 @@ void cmLinkLineComputer::ComputeLinkLibs(
   ItemVector const& items = cli.GetItems();
   for (auto const& item : items) {
     if (item.Target &&
-        item.Target->GetType() == cmStateEnums::INTERFACE_LIBRARY) {
+        (item.Target->GetType() == cmStateEnums::INTERFACE_LIBRARY ||
+         item.Target->GetType() == cmStateEnums::OBJECT_LIBRARY)) {
       continue;
     }
 
@@ -111,24 +113,26 @@ std::string cmLinkLineComputer::ConvertToOutputForExisting(
 
 std::string cmLinkLineComputer::ComputeLinkPath(
   cmComputeLinkInformation& cli, std::string const& libPathFlag,
-  std::string const& libPathTerminator)
+  std::string const& libPathTerminator, std::string const& stdLinkDirString)
 {
   std::string linkPath;
   std::vector<BT<std::string>> linkPathList;
-  this->ComputeLinkPath(cli, libPathFlag, libPathTerminator, linkPathList);
+  this->ComputeLinkPath(cli, libPathFlag, libPathTerminator, stdLinkDirString,
+                        linkPathList);
   cli.AppendValues(linkPath, linkPathList);
   return linkPath;
 }
 
 void cmLinkLineComputer::ComputeLinkPath(
   cmComputeLinkInformation& cli, std::string const& libPathFlag,
-  std::string const& libPathTerminator, std::vector<BT<std::string>>& linkPath)
+  std::string const& libPathTerminator, std::string const& stdLinkDirString,
+  std::vector<BT<std::string>>& linkPath)
 {
   if (cli.GetLinkLanguage() == "Swift") {
     std::string linkPathNoBT;
 
-    for (const cmComputeLinkInformation::Item& item : cli.GetItems()) {
-      const cmGeneratorTarget* target = item.Target;
+    for (cmComputeLinkInformation::Item const& item : cli.GetItems()) {
+      cmGeneratorTarget const* target = item.Target;
       if (!target) {
         continue;
       }
@@ -141,10 +145,10 @@ void cmLinkLineComputer::ComputeLinkPath(
         }
 
         linkPathNoBT +=
-          cmStrCat(" ", libPathFlag,
+          cmStrCat(' ', libPathFlag,
                    this->ConvertToOutputForExisting(
                      item.Target->GetDirectory(cli.GetConfig(), type)),
-                   libPathTerminator, " ");
+                   libPathTerminator, ' ');
       }
     }
 
@@ -154,10 +158,16 @@ void cmLinkLineComputer::ComputeLinkPath(
   }
 
   for (BT<std::string> libDir : cli.GetDirectoriesWithBacktraces()) {
-    libDir.Value = cmStrCat(" ", libPathFlag,
+    libDir.Value = cmStrCat(' ', libPathFlag,
                             this->ConvertToOutputForExisting(libDir.Value),
-                            libPathTerminator, " ");
+                            libPathTerminator, ' ');
     linkPath.emplace_back(libDir);
+  }
+
+  for (auto& linkDir : cmList(stdLinkDirString)) {
+    linkPath.emplace_back(cmStrCat(' ', libPathFlag,
+                                   this->ConvertToOutputForExisting(linkDir),
+                                   libPathTerminator, ' '));
   }
 }
 
@@ -191,24 +201,16 @@ std::string cmLinkLineComputer::ComputeRPath(cmComputeLinkInformation& cli)
 }
 
 std::string cmLinkLineComputer::ComputeFrameworkPath(
-  cmComputeLinkInformation& cli, cmValue fwSearchFlag, cmValue sysFwSearchFlag)
+  cmComputeLinkInformation& cli, cmValue fwSearchFlag)
 {
-  if (!fwSearchFlag && !sysFwSearchFlag) {
+  if (!fwSearchFlag) {
     return std::string{};
   }
 
   std::string frameworkPath;
-  auto const& fwDirs = cli.GetFrameworkPaths();
-  for (auto const& fd : fwDirs) {
-    if (sysFwSearchFlag &&
-        cli.GetTarget()->IsSystemIncludeDirectory(fd, cli.GetConfig(),
-                                                  cli.GetLinkLanguage())) {
-      frameworkPath += sysFwSearchFlag;
-    } else {
-      frameworkPath += fwSearchFlag;
-    }
-    frameworkPath += this->ConvertToOutputFormat(fd);
-    frameworkPath += " ";
+  for (auto const& fd : cli.GetFrameworkPaths()) {
+    frameworkPath +=
+      cmStrCat(fwSearchFlag, this->ConvertToOutputFormat(fd), ' ');
   }
   return frameworkPath;
 }

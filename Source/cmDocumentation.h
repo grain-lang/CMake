@@ -1,5 +1,5 @@
 /* Distributed under the OSI-approved BSD 3-Clause License.  See accompanying
-   file Copyright.txt or https://cmake.org/licensing for details.  */
+   file LICENSE.rst or https://cmake.org/licensing for details.  */
 #pragma once
 
 #include "cmConfigure.h" // IWYU pragma: keep
@@ -34,6 +34,7 @@ public:
     ListVariables,
     ListPolicies,
     ListGenerators,
+    OneArbitrary,
     OneManual,
     OneCommand,
     OneModule,
@@ -53,8 +54,8 @@ public:
    * all arguments after the -E are ignored and not searched for
    * help arguments.
    */
-  bool CheckOptions(int argc, const char* const* argv,
-                    const char* exitOpt = nullptr);
+  bool CheckOptions(int argc, char const* const* argv,
+                    char const* exitOpt = nullptr);
 
   /**
    * Print help requested on the command line.  Call after
@@ -70,13 +71,13 @@ public:
   void SetShowGenerators(bool showGen) { this->ShowGenerators = showGen; }
 
   /** Set the program name for standard document generation.  */
-  void SetName(const std::string& name);
+  void SetName(std::string const& name);
 
   /** Set a section of the documentation. Typical sections include Name,
       Usage, Description, Options */
-  void SetSection(const char* sectionName, cmDocumentationSection section);
+  void SetSection(char const* sectionName, cmDocumentationSection section);
   template <typename Iterable>
-  void SetSection(const char* sectionName, const Iterable& docs)
+  void SetSection(char const* sectionName, Iterable const& docs)
   {
     cmDocumentationSection sec{ sectionName };
     sec.Append(docs);
@@ -85,17 +86,17 @@ public:
 
   /** Add the documentation to the beginning/end of the section */
   template <typename Iterable>
-  void PrependSection(const char* sectionName, const Iterable& docs)
+  void PrependSection(char const* sectionName, Iterable const& docs)
   {
     this->SectionAtName(sectionName).Prepend(docs);
   }
-  void PrependSection(const char* sectionName, cmDocumentationEntry& docs);
+  void PrependSection(char const* sectionName, cmDocumentationEntry& docs);
   template <typename Iterable>
-  void AppendSection(const char* sectionName, const Iterable& docs)
+  void AppendSection(char const* sectionName, Iterable const& docs)
   {
     this->SectionAtName(sectionName).Append(docs);
   }
-  void AppendSection(const char* sectionName, cmDocumentationEntry& docs);
+  void AppendSection(char const* sectionName, cmDocumentationEntry& docs);
 
   /** Add common (to all tools) documentation section(s) */
   void addCommonStandardDocSections();
@@ -118,6 +119,7 @@ private:
   bool PrintUsage(std::ostream& os);
   bool PrintHelp(std::ostream& os);
   bool PrintHelpFull(std::ostream& os);
+  bool PrintHelpOneArbitrary(std::ostream& os);
   bool PrintHelpOneManual(std::ostream& os);
   bool PrintHelpOneCommand(std::ostream& os);
   bool PrintHelpOneModule(std::ostream& os);
@@ -133,13 +135,13 @@ private:
   bool PrintHelpListGenerators(std::ostream& os);
   bool PrintOldCustomModules(std::ostream& os);
 
-  const char* GetNameString() const;
+  char const* GetNameString() const;
 
   bool ShowGenerators;
 
   std::string NameString;
   std::map<std::string, cmDocumentationSection> AllSections;
-  cmDocumentationSection& SectionAtName(const char* name);
+  cmDocumentationSection& SectionAtName(char const* name);
 
   std::string CurrentArgument;
 
@@ -154,4 +156,5 @@ private:
   cmDocumentationFormatter Formatter;
 
   static void WarnFormFromFilename(RequestedHelpItem& request, bool& result);
+  static std::string GeneralizeKeyword(std::string word);
 };

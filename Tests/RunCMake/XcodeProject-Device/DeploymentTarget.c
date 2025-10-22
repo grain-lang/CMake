@@ -5,6 +5,10 @@
 #  if __MAC_OS_X_VERSION_MIN_REQUIRED != __MAC_10_11
 #    error macOS deployment version mismatch
 #  endif
+#elif TARGET_OS_VISION
+#  if __VISION_OS_VERSION_MIN_REQUIRED != __VISIONOS_1_0
+#    error visionOS deployment version mismatch
+#  endif
 #elif TARGET_OS_IOS
 #  if __IPHONE_OS_VERSION_MIN_REQUIRED != __IPHONE_9_1
 #    error iOS deployment version mismatch
@@ -21,6 +25,6 @@
 #  error unknown OS
 #endif
 
-void foo()
+void foo(void)
 {
 }

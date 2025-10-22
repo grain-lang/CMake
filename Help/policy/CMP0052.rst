@@ -1,6 +1,9 @@
 CMP0052
 -------
 
+.. |REMOVED_IN_CMAKE_VERSION| replace:: 4.0
+.. include:: include/REMOVED_PROLOGUE.rst
+
 .. versionadded:: 3.1
 
 Reject source and build dirs in installed
@@ -21,9 +24,6 @@ The ``OLD`` behavior for this policy is to export the content of the
 directory.  The ``NEW`` behavior for this
 policy is to issue an error if such a directory is used.
 
-This policy was introduced in CMake version 3.1.
-CMake version |release| warns when the policy is not set and uses
-``OLD`` behavior.  Use the :command:`cmake_policy` command to set it
-to ``OLD`` or ``NEW`` explicitly.
-
-.. include:: DEPRECATED.txt
+.. |INTRODUCED_IN_CMAKE_VERSION| replace:: 3.1
+.. |WARNED_OR_DID_NOT_WARN| replace:: warned
+.. include:: include/REMOVED_EPILOGUE.rst

@@ -1,27 +1,28 @@
 /* Distributed under the OSI-approved BSD 3-Clause License.  See accompanying
-   file Copyright.txt or https://cmake.org/licensing for details.  */
+   file LICENSE.rst or https://cmake.org/licensing for details.  */
 #include "cmVisualStudioSlnData.h"
 
 #include <cstddef>
 #include <utility>
 
+#include "cmStringAlgorithms.h"
 #include "cmSystemTools.h"
 
 void cmSlnProjectEntry::AddProjectConfiguration(
-  const std::string& solutionConfiguration,
-  const std::string& projectConfiguration)
+  std::string const& solutionConfiguration,
+  std::string const& projectConfiguration)
 {
   projectConfigurationMap[solutionConfiguration] = projectConfiguration;
 }
 
 std::string cmSlnProjectEntry::GetProjectConfiguration(
-  const std::string& solutionConfiguration)
+  std::string const& solutionConfiguration)
 {
   return projectConfigurationMap[solutionConfiguration];
 }
 
 cm::optional<cmSlnProjectEntry> cmSlnData::GetProjectByGUID(
-  const std::string& projectGUID) const
+  std::string const& projectGUID) const
 {
   auto it(ProjectsByGUID.find(projectGUID));
   if (it != ProjectsByGUID.end()) {
@@ -31,7 +32,7 @@ cm::optional<cmSlnProjectEntry> cmSlnData::GetProjectByGUID(
 }
 
 cm::optional<cmSlnProjectEntry> cmSlnData::GetProjectByName(
-  const std::string& projectName) const
+  std::string const& projectName) const
 {
   auto it(ProjectNameIndex.find(projectName));
   if (it != ProjectNameIndex.end()) {
@@ -52,8 +53,8 @@ std::vector<cmSlnProjectEntry> cmSlnData::GetProjects() const
 }
 
 cmSlnProjectEntry* cmSlnData::AddProject(
-  const std::string& projectGUID, const std::string& projectName,
-  const std::string& projectRelativePath)
+  std::string const& projectGUID, std::string const& projectName,
+  std::string const& projectRelativePath)
 {
   auto it(ProjectsByGUID.find(projectGUID));
   if (it != ProjectsByGUID.end()) {
@@ -69,10 +70,11 @@ cmSlnProjectEntry* cmSlnData::AddProject(
 }
 
 std::string cmSlnData::GetConfigurationTarget(
-  const std::string& projectName, const std::string& solutionConfiguration,
-  const std::string& platformName)
+  std::string const& projectName, std::string const& solutionConfiguration,
+  std::string const& platformName)
 {
-  std::string solutionTarget = solutionConfiguration + "|" + platformName;
+  std::string solutionTarget =
+    cmStrCat(solutionConfiguration, '|', platformName);
   cm::optional<cmSlnProjectEntry> project = GetProjectByName(projectName);
   if (!project) {
     return platformName;

@@ -68,6 +68,7 @@ target_link_libraries(imp_testExe1
   exp_testLib7
   exp_testLibCycleA
   exp_testLibPerConfigDest
+  exp_testSharedObjectAIX
   exp_testStaticLibWithPlugin
   )
 
@@ -123,6 +124,7 @@ target_link_libraries(imp_testExe1b
   bld_testLib7
   bld_testLibCycleA
   bld_testLibPerConfigDest
+  bld_testSharedObjectAIX
   bld_testStaticLibWithPlugin
   )
 
@@ -184,13 +186,9 @@ if(CMAKE_SHARED_LIBRARY_SONAME_C_FLAG AND
   endforeach()
 endif()
 
-add_executable(cmp0022OLD_test cmp0022OLD_test_vs6_1.cpp)
-target_link_libraries(cmp0022OLD_test bld_cmp0022OLD)
 add_executable(cmp0022NEW_test cmp0022NEW_test_vs6_1.cpp)
 target_link_libraries(cmp0022NEW_test bld_cmp0022NEW)
 
-add_executable(cmp0022OLD_exp_test cmp0022OLD_test_vs6_2.cpp)
-target_link_libraries(cmp0022OLD_exp_test exp_cmp0022OLD)
 add_executable(cmp0022NEW_exp_test cmp0022NEW_test_vs6_2.cpp)
 target_link_libraries(cmp0022NEW_exp_test exp_cmp0022NEW)
 
@@ -211,10 +209,8 @@ target_link_libraries(imp_ExePlugin1b PRIVATE bld_testExeWithPluginHelper testEx
 
 # Export/CMakeLists.txt pretends the RelWithDebInfo (as well as Debug)
 # configuration should link to debug libs.
-foreach(c DEBUG RELWITHDEBINFO)
-  set_property(TARGET imp_testExe1 PROPERTY COMPILE_DEFINITIONS_${c} EXE_DBG)
-  set_property(TARGET imp_testExe1b PROPERTY COMPILE_DEFINITIONS_${c} EXE_DBG)
-endforeach()
+target_compile_definitions(imp_testExe1  PRIVATE "$<$<CONFIG:Debug,RelWithDebInfo>:EXE_DBG>")
+target_compile_definitions(imp_testExe1b PRIVATE "$<$<CONFIG:Debug,RelWithDebInfo>:EXE_DBG>")
 
 #-----------------------------------------------------------------------------
 include(${CMAKE_INSTALL_PREFIX}/lib/expAbs/expAbs.cmake)
@@ -328,6 +324,16 @@ foreach(vis Pub Priv Iface)
   endif()
 endforeach()
 
+# Create executables to verify custom transitive properties.
+add_executable(imp_testLib10 imp_testLib10.c)
+target_link_libraries(imp_testLib10 PRIVATE exp_testLib10)
+add_executable(imp_testLib10b imp_testLib10.c)
+target_link_libraries(imp_testLib10b PRIVATE bld_testLib10)
+add_executable(imp_testLib11 imp_testLib11.c)
+target_link_libraries(imp_testLib11 PRIVATE exp_testLib11)
+add_executable(imp_testLib11b imp_testLib11.c)
+target_link_libraries(imp_testLib11b PRIVATE bld_testLib11)
+
 #-----------------------------------------------------------------------------
 # Test that handling imported targets, including transitive dependencies,
 # works in CheckFunctionExists (...and hopefully all other try_compile() checks
@@ -415,32 +421,16 @@ target_link_libraries(iface_test_bld bld_testSharedLibDepends)
 set_property(TARGET iface_test_bld PROPERTY NO_SYSTEM_FROM_IMPORTED 1)
 
 set_property(TARGET bld_testSharedLibRequired APPEND PROPERTY
-    LINK_INTERFACE_LIBRARIES
+    INTERFACE_LINK_LIBRARIES
         excludedFromAll
 )
-get_target_property(_configs bld_testSharedLibRequired IMPORTED_CONFIGURATIONS)
-foreach(_config ${_configs})
-    set_property(TARGET bld_testSharedLibRequired APPEND PROPERTY
-        IMPORTED_LINK_INTERFACE_LIBRARIES_${_config}
-        excludedFromAll
-    )
-endforeach()
-unset(_configs)
 add_executable(iface_test_exp iface_test.cpp)
 target_link_libraries(iface_test_exp testSharedLibDepends)
 
 set_property(TARGET testSharedLibDepends APPEND PROPERTY
-    LINK_INTERFACE_LIBRARIES
+    INTERFACE_LINK_LIBRARIES
         excludedFromAll
 )
-get_target_property(_configs testSharedLibDepends IMPORTED_CONFIGURATIONS)
-foreach(_config ${_configs})
-    set_property(TARGET testSharedLibDepends APPEND PROPERTY
-        IMPORTED_LINK_INTERFACE_LIBRARIES_${_config}
-        excludedFromAll
-    )
-endforeach()
-unset(_configs)
 
 if (((CMAKE_C_COMPILER_ID STREQUAL GNU AND CMAKE_C_COMPILER_VERSION VERSION_GREATER 4.4)
     OR CMAKE_C_COMPILER_ID MATCHES "LCC"
@@ -462,7 +452,7 @@ if (((CMAKE_C_COMPILER_ID STREQUAL GNU AND CMAKE_C_COMPILER_VERSION VERSION_GREA
 
     unset(EXP_ERROR_VARIABLE CACHE)
     try_compile(EXP_ERROR_VARIABLE
-      "${CMAKE_CURRENT_SOURCE_DIR}/test_system"
+      "${CMAKE_CURRENT_BINARY_DIR}/test_system"
       "${CMAKE_CURRENT_SOURCE_DIR}/test_system.cpp"
       COMPILE_DEFINITIONS "-Wunused-variable -Werror=unused-variable"
       LINK_LIBRARIES exp_systemlib
@@ -476,7 +466,7 @@ if (((CMAKE_C_COMPILER_ID STREQUAL GNU AND CMAKE_C_COMPILER_VERSION VERSION_GREA
       unset(EXP_RUN_VAR CACHE)
       unset(EXP_COMPILE_VAR CACHE)
       try_run(EXP_RUN_VAR EXP_COMPILE_VAR
-        "${CMAKE_CURRENT_SOURCE_DIR}/test_system"
+        "${CMAKE_CURRENT_BINARY_DIR}/test_system"
         "${CMAKE_CURRENT_SOURCE_DIR}/test_system.cpp"
         COMPILE_DEFINITIONS "-Wunused-variable -Werror=unused-variable"
         LINK_LIBRARIES exp_systemlib
@@ -493,21 +483,21 @@ if (((CMAKE_C_COMPILER_ID STREQUAL GNU AND CMAKE_C_COMPILER_VERSION VERSION_GREA
 
     unset(BLD_ERROR_VARIABLE CACHE)
     try_compile(BLD_ERROR_VARIABLE
-      "${CMAKE_CURRENT_SOURCE_DIR}/test_system"
+      "${CMAKE_CURRENT_BINARY_DIR}/test_system"
       "${CMAKE_CURRENT_SOURCE_DIR}/test_system.cpp"
       COMPILE_DEFINITIONS "-Wunused-variable -Werror=unused-variable"
       LINK_LIBRARIES bld_systemlib
       OUTPUT_VARIABLE OUTPUT
       )
     if(NOT BLD_ERROR_VARIABLE)
-      message(SEND_ERROR "BLD_ERROR_VARIABLE try_compile failed, but it was expected to succeed.")
+      message(SEND_ERROR "BLD_ERROR_VARIABLE try_compile failed, but it was expected to succeed. ${OUTPUT}")
     endif()
 
     if(NOT CMAKE_CROSSCOMPILING)
       unset(BLD_RUN_VAR CACHE)
       unset(BLD_COMPILE_VAR CACHE)
       try_run(BLD_RUN_VAR BLD_COMPILE_VAR
-        "${CMAKE_CURRENT_SOURCE_DIR}/test_system"
+        "${CMAKE_CURRENT_BINARY_DIR}/test_system"
         "${CMAKE_CURRENT_SOURCE_DIR}/test_system.cpp"
         COMPILE_DEFINITIONS "-Wunused-variable -Werror=unused-variable"
         LINK_LIBRARIES bld_systemlib
@@ -518,6 +508,91 @@ if (((CMAKE_C_COMPILER_ID STREQUAL GNU AND CMAKE_C_COMPILER_VERSION VERSION_GREA
       endif()
     endif()
   endif()
+
+  # Testing try_compile with ALIAS targets.
+  # These assume that previous test were successful, or at least the failures will be at the linking stage
+  # with symbol not found errors
+
+  # First make sure that if the test run without appropriate alias targets, they should error out
+  try_compile(FAILING_LIBRARY_ALIAS_ERROR_VARIABLE
+          "${CMAKE_CURRENT_BINARY_DIR}/test_failing_library_alias"
+          "${CMAKE_CURRENT_SOURCE_DIR}/test_system.cpp"
+          LINK_LIBRARIES not_existing_library
+          OUTPUT_VARIABLE OUTPUT
+          NO_CACHE
+  )
+  if(FAILING_LIBRARY_ALIAS_ERROR_VARIABLE)
+    message(SEND_ERROR "FAILING_LIBRARY_ALIAS_ERROR_VARIABLE try_compile succeeded, but it was expected to fail ${OUTPUT}.")
+  endif()
+
+  # FIXME: CMAKE_TRY_COMPILE_TARGET_TYPE=MODULE is needed to properly link and test targets linked to an executable
+#  set(CMAKE_TRY_COMPILE_TARGET_TYPE STATIC_LIBRARY)
+#  try_compile(FAILING_EXE_ALIAS_ERROR_VARIABLE
+#          "${CMAKE_CURRENT_BINARY_DIR}/test_failing_exe_alias"
+#          "${CMAKE_CURRENT_SOURCE_DIR}/imp_mod1.c"
+#          LINK_LIBRARIES not_existing_executable
+#          OUTPUT_VARIABLE OUTPUT
+#          NO_CACHE
+#  )
+#  unset(CMAKE_TRY_COMPILE_TARGET_TYPE)
+#  if(FAILING_EXE_ALIAS_ERROR_VARIABLE)
+#    message(SEND_ERROR "FAILING_EXE_ALIAS_ERROR_VARIABLE try_compile succeeded, but it was expected to fail ${OUTPUT}.")
+#  endif()
+
+  # Do the actual try_compile tests for ALIAS targets
+  add_library(exp_systemlib_alias ALIAS exp_systemlib)
+  try_compile(EXP_LIBRARY_ALIAS_ERROR_VARIABLE
+          "${CMAKE_CURRENT_BINARY_DIR}/test_library_alias"
+          "${CMAKE_CURRENT_SOURCE_DIR}/test_system.cpp"
+          LINK_LIBRARIES exp_systemlib_alias
+          OUTPUT_VARIABLE OUTPUT
+          NO_CACHE
+  )
+  if(NOT EXP_LIBRARY_ALIAS_ERROR_VARIABLE)
+    message(SEND_ERROR "EXP_LIBRARY_ALIAS_ERROR_VARIABLE try_compile failed with library aliased target, but it was expected to succeed ${OUTPUT}.")
+  endif()
+
+  # FIXME: CMAKE_TRY_COMPILE_TARGET_TYPE=MODULE is needed to properly link and test targets linked to an executable
+#  set(CMAKE_TRY_COMPILE_TARGET_TYPE MODULE)
+#  add_executable(exp_exe_alias ALIAS exp_testExe2)
+#  try_compile(EXP_EXE_ALIAS_ERROR_VARIABLE
+#          "${CMAKE_CURRENT_BINARY_DIR}/test_exe_alias"
+#          "${CMAKE_CURRENT_SOURCE_DIR}/imp_mod1.c"
+#          LINK_LIBRARIES exp_exe_alias
+#          OUTPUT_VARIABLE OUTPUT
+#          NO_CACHE
+#  )
+#  unset(CMAKE_TRY_COMPILE_TARGET_TYPE)
+#  if(NOT EXP_EXE_ALIAS_ERROR_VARIABLE)
+#    message(SEND_ERROR "EXP_EXE_ALIAS_ERROR_VARIABLE try_compile failed with executable aliased target, but it was expected to succeed ${OUTPUT}.")
+#  endif()
+
+  add_library(bld_systemlib_alias ALIAS bld_systemlib)
+  try_compile(BLD_LIBRARY_ALIAS_ERROR_VARIABLE
+          "${CMAKE_CURRENT_BINARY_DIR}/test_library_alias"
+          "${CMAKE_CURRENT_SOURCE_DIR}/test_system.cpp"
+          LINK_LIBRARIES bld_systemlib_alias
+          OUTPUT_VARIABLE OUTPUT
+          NO_CACHE
+  )
+  if(NOT BLD_LIBRARY_ALIAS_ERROR_VARIABLE)
+    message(SEND_ERROR "BLD_LIBRARY_ALIAS_ERROR_VARIABLE try_compile failed with library aliased target, but it was expected to succeed. ${OUTPUT}")
+  endif()
+
+  # FIXME: CMAKE_TRY_COMPILE_TARGET_TYPE=MODULE is needed to properly link and test targets linked to an executable
+#  set(CMAKE_TRY_COMPILE_TARGET_TYPE MODULE)
+#  add_executable(bld_exe_alias ALIAS bld_testExe2)
+#  try_compile(BLD_EXE_ALIAS_ERROR_VARIABLE
+#          "${CMAKE_CURRENT_BINARY_DIR}/test_exe_alias"
+#          "${CMAKE_CURRENT_SOURCE_DIR}/imp_mod1.c"
+#          LINK_LIBRARIES bld_exe_alias
+#          OUTPUT_VARIABLE OUTPUT
+#          NO_CACHE
+#  )
+#  unset(CMAKE_TRY_COMPILE_TARGET_TYPE)
+#  if(NOT BLD_EXE_ALIAS_ERROR_VARIABLE)
+#    message(SEND_ERROR "BLD_EXE_ALIAS_ERROR_VARIABLE try_compile failed with executable aliased target, but it was expected to succeed. ${OUTPUT}")
+#  endif()
 endif()
 
 #---------------------------------------------------------------------------------

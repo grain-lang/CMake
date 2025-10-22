@@ -1,6 +1,6 @@
 #include "FrameworkExample.h"
 
-int FourtyTwo()
+int FortyTwo(void)
 {
   return 42;
 }

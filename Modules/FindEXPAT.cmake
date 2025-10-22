@@ -1,40 +1,69 @@
 # Distributed under the OSI-approved BSD 3-Clause License.  See accompanying
-# file Copyright.txt or https://cmake.org/licensing for details.
+# file LICENSE.rst or https://cmake.org/licensing for details.
 
 #[=======================================================================[.rst:
 FindEXPAT
 ---------
 
-Find the native Expat headers and library.
-Expat is a stream-oriented XML parser library written in C.
+Finds the native Expat headers and library.  Expat is a stream-oriented XML
+parser library written in C.
 
 Imported Targets
 ^^^^^^^^^^^^^^^^
 
-.. versionadded:: 3.10
-
-This module defines the following :prop_tgt:`IMPORTED` targets:
+This module provides the following :ref:`Imported Targets`:
 
 ``EXPAT::EXPAT``
-  The Expat ``expat`` library, if found.
+  .. versionadded:: 3.10
+
+  Target encapsulating the Expat library (``expat``) usage requirements.  This
+  target is available only if Expat is found.
 
 Result Variables
 ^^^^^^^^^^^^^^^^
 
-This module will set the following variables in your project:
+This module sets the following variables:
 
 ``EXPAT_INCLUDE_DIRS``
-  where to find expat.h, etc.
+  Include directories containing ``expat.h`` and related headers needed to use
+  Expat.
 ``EXPAT_LIBRARIES``
-  the libraries to link against to use Expat.
+  Libraries needed to link against to use Expat.
 ``EXPAT_FOUND``
-  true if the Expat headers and libraries were found.
+  Boolean indicating whether the Expat is found.
 
+Hints
+^^^^^
+
+This module accepts the following variables:
+
+``EXPAT_USE_STATIC_LIBS``
+  .. versionadded:: 3.28
+
+  Set to ``TRUE`` to use static libraries.
+
+  .. versionadded:: 3.31
+
+    Implemented on non-Windows platforms.
+
+Examples
+^^^^^^^^
+
+Finding Expat library and linking it to a project target:
+
+.. code-block:: cmake
+
+  find_package(EXPAT)
+  target_link_libraries(project_target PRIVATE EXPAT::EXPAT)
 #]=======================================================================]
 
-find_package(PkgConfig QUIET)
+cmake_policy(PUSH)
+cmake_policy(SET CMP0159 NEW) # file(STRINGS) with REGEX updates CMAKE_MATCH_<n>
 
-pkg_check_modules(PC_EXPAT QUIET expat)
+find_package(PkgConfig QUIET)
+if(PKG_CONFIG_FOUND)
+  pkg_check_modules(PC_EXPAT QUIET expat)
+endif()
 
 # Look for the header file.
 find_path(EXPAT_INCLUDE_DIR NAMES expat.h HINTS ${PC_EXPAT_INCLUDE_DIRS})
@@ -43,8 +72,13 @@ set(EXPAT_NAMES expat expatw)
 set(EXPAT_NAMES_DEBUG expatd expatwd)
 
 if(WIN32)
-  list(APPEND EXPAT_NAMES expatMT expatMD expatwMT expatwMD)
-  list(APPEND EXPAT_NAMES_DEBUG expatdMT expatdMD expatwdMT expatwdMD)
+  if(EXPAT_USE_STATIC_LIBS)
+    list(APPEND EXPAT_NAMES expatMT expatwMT)
+    list(APPEND EXPAT_NAMES_DEBUG expatdMT expatwdMT)
+  else()
+    list(APPEND EXPAT_NAMES expatMT expatMD expatwMT expatwMD)
+    list(APPEND EXPAT_NAMES_DEBUG expatdMT expatdMD expatwdMT expatwdMD)
+  endif()
 endif()
 
 # Allow EXPAT_LIBRARY to be set manually, as the location of the expat library
@@ -55,8 +89,22 @@ if(NOT EXPAT_LIBRARY)
     set(_expat_ORIG_CMAKE_FIND_LIBRARY_PREFIXES)
   endif()
 
+  if(DEFINED CMAKE_FIND_LIBRARY_SUFFIXES)
+    set(_expat_ORIG_CMAKE_FIND_LIBRARY_SUFFIXES "${CMAKE_FIND_LIBRARY_SUFFIXES}")
+  else()
+    set(_expat_ORIG_CMAKE_FIND_LIBRARY_SUFFIXES)
+  endif()
+
   if(WIN32)
     list(APPEND CMAKE_FIND_LIBRARY_PREFIXES "" "lib")
+  endif()
+
+  if (EXPAT_USE_STATIC_LIBS)
+    if(WIN32)
+      set(CMAKE_FIND_LIBRARY_SUFFIXES .lib .a ${CMAKE_FIND_LIBRARY_SUFFIXES})
+    else()
+      set(CMAKE_FIND_LIBRARY_SUFFIXES .a)
+    endif()
   endif()
 
   # Look for the library.
@@ -68,6 +116,12 @@ if(NOT EXPAT_LIBRARY)
     set(CMAKE_FIND_LIBRARY_PREFIXES "${_expat_ORIG_CMAKE_FIND_LIBRARY_PREFIXES}")
   else()
     set(CMAKE_FIND_LIBRARY_PREFIXES)
+  endif()
+
+  if(DEFINED _expat_ORIG_CMAKE_FIND_LIBRARY_SUFFIXES)
+    set(CMAKE_FIND_LIBRARY_SUFFIXES "${_expat_ORIG_CMAKE_FIND_LIBRARY_SUFFIXES}")
+  else()
+    set(CMAKE_FIND_LIBRARY_SUFFIXES)
   endif()
 
   include(${CMAKE_CURRENT_LIST_DIR}/SelectLibraryConfigurations.cmake)
@@ -96,8 +150,8 @@ if(EXPAT_INCLUDE_DIR AND EXISTS "${EXPAT_INCLUDE_DIR}/expat.h")
   endforeach()
 endif()
 
-include(${CMAKE_CURRENT_LIST_DIR}/FindPackageHandleStandardArgs.cmake)
-FIND_PACKAGE_HANDLE_STANDARD_ARGS(EXPAT
+include(FindPackageHandleStandardArgs)
+find_package_handle_standard_args(EXPAT
                                   REQUIRED_VARS EXPAT_LIBRARY EXPAT_INCLUDE_DIR
                                   VERSION_VAR EXPAT_VERSION_STRING)
 
@@ -114,6 +168,11 @@ if(EXPAT_FOUND)
     set_target_properties(EXPAT::EXPAT PROPERTIES
       IMPORTED_LINK_INTERFACE_LANGUAGES "C"
       INTERFACE_INCLUDE_DIRECTORIES "${EXPAT_INCLUDE_DIRS}")
+
+    if(EXPAT_USE_STATIC_LIBS)
+      set_property(TARGET EXPAT::EXPAT APPEND PROPERTY
+                   INTERFACE_COMPILE_DEFINITIONS "XML_STATIC")
+    endif()
 
     if(EXPAT_LIBRARY_RELEASE)
       set_property(TARGET EXPAT::EXPAT APPEND PROPERTY
@@ -137,3 +196,5 @@ if(EXPAT_FOUND)
 endif()
 
 mark_as_advanced(EXPAT_INCLUDE_DIR EXPAT_LIBRARY)
+
+cmake_policy(POP)

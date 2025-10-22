@@ -1,97 +1,87 @@
 /* Distributed under the OSI-approved BSD 3-Clause License.  See accompanying
-   file Copyright.txt or https://cmake.org/licensing for details.  */
-#include "cmConfigure.h"
-
+   file LICENSE.rst or https://cmake.org/licensing for details.  */
 #include "cmUVProcessChain.h"
 
 #include <array>
-#include <cassert>
 #include <csignal>
 #include <cstdio>
 #include <istream> // IWYU pragma: keep
-#include <iterator>
-#include <type_traits>
 #include <utility>
 
 #include <cm/memory>
 
 #include <cm3p/uv.h>
 
+#include "cm_fileno.hxx"
+
 #include "cmGetPipes.h"
 #include "cmUVHandlePtr.h"
-#include "cmUVStreambuf.h"
 
 struct cmUVProcessChain::InternalData
 {
-  struct BasicStreamData
+  struct StreamData
   {
-    cmUVStreambuf Streambuf;
-    cm::uv_pipe_ptr BuiltinStream;
+    int BuiltinStream = -1;
     uv_stdio_container_t Stdio;
-  };
-
-  template <typename IOStream>
-  struct StreamData : public BasicStreamData
-  {
-    StreamData()
-      : BuiltinIOStream(&this->Streambuf)
-    {
-    }
-
-    IOStream BuiltinIOStream;
-
-    IOStream* GetBuiltinStream()
-    {
-      if (this->BuiltinStream.get()) {
-        return &this->BuiltinIOStream;
-      }
-      return nullptr;
-    }
   };
 
   struct ProcessData
   {
     cmUVProcessChain::InternalData* Data;
     cm::uv_process_ptr Process;
+    cm::uv_pipe_ptr InputPipe;
     cm::uv_pipe_ptr OutputPipe;
-    bool Finished = false;
     Status ProcessStatus;
+
+    void Finish();
   };
 
-  const cmUVProcessChainBuilder* Builder = nullptr;
+  cmUVProcessChainBuilder const* Builder = nullptr;
 
   bool Valid = false;
 
-  cm::uv_loop_ptr Loop;
+  cm::uv_loop_ptr BuiltinLoop;
+  uv_loop_t* Loop;
 
-  StreamData<std::istream> OutputStreamData;
-  StreamData<std::istream> ErrorStreamData;
+  StreamData InputStreamData;
+  StreamData OutputStreamData;
+  StreamData ErrorStreamData;
+  cm::uv_pipe_ptr TempOutputPipe;
+  cm::uv_pipe_ptr TempErrorPipe;
 
   unsigned int ProcessesCompleted = 0;
   std::vector<std::unique_ptr<ProcessData>> Processes;
 
-  bool Prepare(const cmUVProcessChainBuilder* builder);
-  bool AddCommand(const cmUVProcessChainBuilder::ProcessConfiguration& config,
-                  bool first, bool last);
-  bool Finish();
-
-  static const Status* GetStatus(const ProcessData& data);
+  bool Prepare(cmUVProcessChainBuilder const* builder);
+  void SpawnProcess(
+    std::size_t index,
+    cmUVProcessChainBuilder::ProcessConfiguration const& config, bool first,
+    bool last);
+  void Finish();
 };
 
-cmUVProcessChainBuilder::cmUVProcessChainBuilder()
-{
-  this->SetNoStream(Stream_INPUT)
-    .SetNoStream(Stream_OUTPUT)
-    .SetNoStream(Stream_ERROR);
-}
+cmUVProcessChainBuilder::cmUVProcessChainBuilder() = default;
 
 cmUVProcessChainBuilder& cmUVProcessChainBuilder::AddCommand(
-  const std::vector<std::string>& arguments)
+  std::vector<std::string> arguments)
 {
   if (!arguments.empty()) {
     this->Processes.emplace_back();
-    this->Processes.back().Arguments = arguments;
+    this->Processes.back().Arguments = std::move(arguments);
   }
+  return *this;
+}
+
+cmUVProcessChainBuilder& cmUVProcessChainBuilder::SetBuiltinLoop()
+{
+  this->Loop = nullptr;
+  return *this;
+}
+
+cmUVProcessChainBuilder& cmUVProcessChainBuilder::SetExternalLoop(
+  uv_loop_t& loop)
+{
+  this->Loop = &loop;
   return *this;
 }
 
@@ -132,9 +122,6 @@ cmUVProcessChainBuilder& cmUVProcessChainBuilder::SetExternalStream(
 {
   switch (stdio) {
     case Stream_INPUT:
-      // FIXME
-      break;
-
     case Stream_OUTPUT:
     case Stream_ERROR: {
       auto& streamData = this->Stdio[stdio];
@@ -144,6 +131,16 @@ cmUVProcessChainBuilder& cmUVProcessChainBuilder::SetExternalStream(
     }
   }
   return *this;
+}
+
+cmUVProcessChainBuilder& cmUVProcessChainBuilder::SetExternalStream(
+  Stream stdio, FILE* stream)
+{
+  int fd = cm_fileno(stream);
+  if (fd >= 0) {
+    return this->SetExternalStream(stdio, fd);
+  }
+  return this->SetNoStream(stdio);
 }
 
 cmUVProcessChainBuilder& cmUVProcessChainBuilder::SetMergedBuiltinStreams()
@@ -159,6 +156,17 @@ cmUVProcessChainBuilder& cmUVProcessChainBuilder::SetWorkingDirectory(
   return *this;
 }
 
+cmUVProcessChainBuilder& cmUVProcessChainBuilder::SetDetached()
+{
+  this->Detached = true;
+  return *this;
+}
+
+uv_loop_t* cmUVProcessChainBuilder::GetLoop() const
+{
+  return this->Loop;
+}
+
 cmUVProcessChain cmUVProcessChainBuilder::Start() const
 {
   cmUVProcessChain chain;
@@ -167,11 +175,9 @@ cmUVProcessChain cmUVProcessChainBuilder::Start() const
     return chain;
   }
 
-  for (auto it = this->Processes.begin(); it != this->Processes.end(); ++it) {
-    if (!chain.Data->AddCommand(*it, it == this->Processes.begin(),
-                                it == std::prev(this->Processes.end()))) {
-      return chain;
-    }
+  for (std::size_t i = 0; i < this->Processes.size(); i++) {
+    chain.Data->SpawnProcess(i, this->Processes[i], i == 0,
+                             i == this->Processes.size() - 1);
   }
 
   chain.Data->Finish();
@@ -179,19 +185,36 @@ cmUVProcessChain cmUVProcessChainBuilder::Start() const
   return chain;
 }
 
-const cmUVProcessChain::Status* cmUVProcessChain::InternalData::GetStatus(
-  const cmUVProcessChain::InternalData::ProcessData& data)
-{
-  if (data.Finished) {
-    return &data.ProcessStatus;
-  }
-  return nullptr;
-}
-
 bool cmUVProcessChain::InternalData::Prepare(
-  const cmUVProcessChainBuilder* builder)
+  cmUVProcessChainBuilder const* builder)
 {
   this->Builder = builder;
+
+  if (this->Builder->Loop) {
+    this->Loop = this->Builder->Loop;
+  } else {
+    this->BuiltinLoop.init();
+    this->Loop = this->BuiltinLoop;
+  }
+
+  auto const& input =
+    this->Builder->Stdio[cmUVProcessChainBuilder::Stream_INPUT];
+  auto& inputData = this->InputStreamData;
+  switch (input.Type) {
+    case cmUVProcessChainBuilder::None:
+      inputData.Stdio.flags = UV_IGNORE;
+      break;
+
+    case cmUVProcessChainBuilder::Builtin: {
+      // FIXME
+      break;
+    }
+
+    case cmUVProcessChainBuilder::External:
+      inputData.Stdio.flags = UV_INHERIT_FD;
+      inputData.Stdio.data.fd = input.FileDescriptor;
+      break;
+  }
 
   auto const& error =
     this->Builder->Stdio[cmUVProcessChainBuilder::Stream_ERROR];
@@ -207,12 +230,17 @@ bool cmUVProcessChain::InternalData::Prepare(
         return false;
       }
 
-      errorData.BuiltinStream.init(*this->Loop, 0);
-      if (uv_pipe_open(errorData.BuiltinStream, pipeFd[0]) < 0) {
-        return false;
-      }
+      errorData.BuiltinStream = pipeFd[0];
       errorData.Stdio.flags = UV_INHERIT_FD;
       errorData.Stdio.data.fd = pipeFd[1];
+
+      if (this->TempErrorPipe.init(*this->Loop, 0) < 0) {
+        return false;
+      }
+      if (uv_pipe_open(this->TempErrorPipe, errorData.Stdio.data.fd) < 0) {
+        return false;
+      }
+
       break;
     }
 
@@ -232,13 +260,25 @@ bool cmUVProcessChain::InternalData::Prepare(
 
     case cmUVProcessChainBuilder::Builtin:
       if (this->Builder->MergedBuiltinStreams) {
+        outputData.BuiltinStream = errorData.BuiltinStream;
         outputData.Stdio.flags = UV_INHERIT_FD;
         outputData.Stdio.data.fd = errorData.Stdio.data.fd;
       } else {
-        outputData.BuiltinStream.init(*this->Loop, 0);
-        outputData.Stdio.flags =
-          static_cast<uv_stdio_flags>(UV_CREATE_PIPE | UV_WRITABLE_PIPE);
-        outputData.Stdio.data.stream = outputData.BuiltinStream;
+        int pipeFd[2];
+        if (cmGetPipes(pipeFd) < 0) {
+          return false;
+        }
+
+        outputData.BuiltinStream = pipeFd[0];
+        outputData.Stdio.flags = UV_INHERIT_FD;
+        outputData.Stdio.data.fd = pipeFd[1];
+
+        if (this->TempOutputPipe.init(*this->Loop, 0) < 0) {
+          return false;
+        }
+        if (uv_pipe_open(this->TempOutputPipe, outputData.Stdio.data.fd) < 0) {
+          return false;
+        }
       }
       break;
 
@@ -248,23 +288,54 @@ bool cmUVProcessChain::InternalData::Prepare(
       break;
   }
 
+  bool first = true;
+  for (std::size_t i = 0; i < this->Builder->Processes.size(); i++) {
+    this->Processes.emplace_back(cm::make_unique<ProcessData>());
+    auto& process = *this->Processes.back();
+    process.Data = this;
+    process.ProcessStatus.Finished = false;
+
+    if (!first) {
+      auto& prevProcess = *this->Processes[i - 1];
+
+      int pipeFd[2];
+      if (cmGetPipes(pipeFd) < 0) {
+        return false;
+      }
+
+      if (prevProcess.OutputPipe.init(*this->Loop, 0) < 0) {
+        return false;
+      }
+      if (uv_pipe_open(prevProcess.OutputPipe, pipeFd[1]) < 0) {
+        return false;
+      }
+      if (process.InputPipe.init(*this->Loop, 0) < 0) {
+        return false;
+      }
+      if (uv_pipe_open(process.InputPipe, pipeFd[0]) < 0) {
+        return false;
+      }
+    }
+
+    first = false;
+  }
+
   return true;
 }
 
-bool cmUVProcessChain::InternalData::AddCommand(
-  const cmUVProcessChainBuilder::ProcessConfiguration& config, bool first,
+void cmUVProcessChain::InternalData::SpawnProcess(
+  std::size_t index,
+  cmUVProcessChainBuilder::ProcessConfiguration const& config, bool first,
   bool last)
 {
-  this->Processes.emplace_back(cm::make_unique<ProcessData>());
-  auto& process = *this->Processes.back();
-  process.Data = this;
+  auto& process = *this->Processes[index];
 
   auto options = uv_process_options_t();
 
   // Bounds were checked at add time, first element is guaranteed to exist
   options.file = config.Arguments[0].c_str();
 
-  std::vector<const char*> arguments;
+  std::vector<char const*> arguments;
   arguments.reserve(config.Arguments.size());
   for (auto const& arg : config.Arguments) {
     arguments.push_back(arg.c_str());
@@ -272,29 +343,34 @@ bool cmUVProcessChain::InternalData::AddCommand(
   arguments.push_back(nullptr);
   options.args = const_cast<char**>(arguments.data());
   options.flags = UV_PROCESS_WINDOWS_HIDE;
+  if (this->Builder->Detached) {
+    options.flags |= UV_PROCESS_DETACHED;
+  }
+#if UV_VERSION_MAJOR > 1 ||                                                   \
+  (UV_VERSION_MAJOR == 1 && UV_VERSION_MINOR >= 48) ||                        \
+  !defined(CMAKE_USE_SYSTEM_LIBUV)
+  options.flags |= UV_PROCESS_WINDOWS_FILE_PATH_EXACT_NAME;
+#endif
+#if UV_VERSION_MAJOR > 1 || !defined(CMAKE_USE_SYSTEM_LIBUV)
+  options.flags |= UV_PROCESS_WINDOWS_USE_PARENT_ERROR_MODE;
+#endif
   if (!this->Builder->WorkingDirectory.empty()) {
     options.cwd = this->Builder->WorkingDirectory.c_str();
   }
 
   std::array<uv_stdio_container_t, 3> stdio;
-  stdio[0] = uv_stdio_container_t();
   if (first) {
-    stdio[0].flags = UV_IGNORE;
+    stdio[0] = this->InputStreamData.Stdio;
   } else {
-    assert(this->Processes.size() >= 2);
-    auto& prev = *this->Processes[this->Processes.size() - 2];
+    stdio[0] = uv_stdio_container_t();
     stdio[0].flags = UV_INHERIT_STREAM;
-    stdio[0].data.stream = prev.OutputPipe;
+    stdio[0].data.stream = process.InputPipe;
   }
   if (last) {
     stdio[1] = this->OutputStreamData.Stdio;
   } else {
-    if (process.OutputPipe.init(*this->Loop, 0) < 0) {
-      return false;
-    }
     stdio[1] = uv_stdio_container_t();
-    stdio[1].flags =
-      static_cast<uv_stdio_flags>(UV_CREATE_PIPE | UV_WRITABLE_PIPE);
+    stdio[1].flags = UV_INHERIT_STREAM;
     stdio[1].data.stream = process.OutputPipe;
   }
   stdio[2] = this->ErrorStreamData.Stdio;
@@ -304,46 +380,32 @@ bool cmUVProcessChain::InternalData::AddCommand(
   options.exit_cb = [](uv_process_t* handle, int64_t exitStatus,
                        int termSignal) {
     auto* processData = static_cast<ProcessData*>(handle->data);
-    processData->Finished = true;
     processData->ProcessStatus.ExitStatus = exitStatus;
     processData->ProcessStatus.TermSignal = termSignal;
-    processData->Data->ProcessesCompleted++;
+    processData->Finish();
   };
 
-  return process.Process.spawn(*this->Loop, options, &process) >= 0;
+  if ((process.ProcessStatus.SpawnResult =
+         process.Process.spawn(*this->Loop, options, &process)) < 0) {
+    process.Finish();
+  }
+  if (this->Builder->Detached) {
+    uv_unref((uv_handle_t*)process.Process);
+  }
+  process.InputPipe.reset();
+  process.OutputPipe.reset();
 }
 
-bool cmUVProcessChain::InternalData::Finish()
+void cmUVProcessChain::InternalData::Finish()
 {
-  if (this->Builder->Stdio[cmUVProcessChainBuilder::Stream_OUTPUT].Type ==
-        cmUVProcessChainBuilder::Builtin &&
-      !this->Builder->MergedBuiltinStreams) {
-    this->OutputStreamData.Streambuf.open(
-      this->OutputStreamData.BuiltinStream);
-  }
-
-  if (this->Builder->Stdio[cmUVProcessChainBuilder::Stream_ERROR].Type ==
-      cmUVProcessChainBuilder::Builtin) {
-    cm::uv_pipe_ptr tmpPipe;
-    if (tmpPipe.init(*this->Loop, 0) < 0) {
-      return false;
-    }
-    if (uv_pipe_open(tmpPipe, this->ErrorStreamData.Stdio.data.fd) < 0) {
-      return false;
-    }
-    tmpPipe.reset();
-
-    this->ErrorStreamData.Streambuf.open(this->ErrorStreamData.BuiltinStream);
-  }
-
+  this->TempOutputPipe.reset();
+  this->TempErrorPipe.reset();
   this->Valid = true;
-  return true;
 }
 
 cmUVProcessChain::cmUVProcessChain()
   : Data(cm::make_unique<InternalData>())
 {
-  this->Data->Loop.init();
 }
 
 cmUVProcessChain::cmUVProcessChain(cmUVProcessChain&& other) noexcept
@@ -365,17 +427,14 @@ uv_loop_t& cmUVProcessChain::GetLoop()
   return *this->Data->Loop;
 }
 
-std::istream* cmUVProcessChain::OutputStream()
+int cmUVProcessChain::OutputStream()
 {
-  if (this->Data->Builder->MergedBuiltinStreams) {
-    return this->Data->ErrorStreamData.GetBuiltinStream();
-  }
-  return this->Data->OutputStreamData.GetBuiltinStream();
+  return this->Data->OutputStreamData.BuiltinStream;
 }
 
-std::istream* cmUVProcessChain::ErrorStream()
+int cmUVProcessChain::ErrorStream()
 {
-  return this->Data->ErrorStreamData.GetBuiltinStream();
+  return this->Data->ErrorStreamData.BuiltinStream;
 }
 
 bool cmUVProcessChain::Valid() const
@@ -383,12 +442,12 @@ bool cmUVProcessChain::Valid() const
   return this->Data->Valid;
 }
 
-bool cmUVProcessChain::Wait(int64_t milliseconds)
+bool cmUVProcessChain::Wait(uint64_t milliseconds)
 {
   bool timeout = false;
   cm::uv_timer_ptr timer;
 
-  if (milliseconds >= 0) {
+  if (milliseconds > 0) {
     timer.init(*this->Data->Loop, &timeout);
     timer.start(
       [](uv_timer_t* handle) {
@@ -406,25 +465,21 @@ bool cmUVProcessChain::Wait(int64_t milliseconds)
   return !timeout;
 }
 
-std::vector<const cmUVProcessChain::Status*> cmUVProcessChain::GetStatus()
+std::vector<cmUVProcessChain::Status const*> cmUVProcessChain::GetStatus()
   const
 {
-  std::vector<const cmUVProcessChain::Status*> statuses(
+  std::vector<cmUVProcessChain::Status const*> statuses(
     this->Data->Processes.size(), nullptr);
   for (std::size_t i = 0; i < statuses.size(); i++) {
-    statuses[i] = this->GetStatus(i);
+    statuses[i] = &this->GetStatus(i);
   }
   return statuses;
 }
 
-const cmUVProcessChain::Status* cmUVProcessChain::GetStatus(
+cmUVProcessChain::Status const& cmUVProcessChain::GetStatus(
   std::size_t index) const
 {
-  auto const& process = *this->Data->Processes[index];
-  if (process.Finished) {
-    return &process.ProcessStatus;
-  }
-  return nullptr;
+  return this->Data->Processes[index]->ProcessStatus;
 }
 
 bool cmUVProcessChain::Finished() const
@@ -435,8 +490,12 @@ bool cmUVProcessChain::Finished() const
 std::pair<cmUVProcessChain::ExceptionCode, std::string>
 cmUVProcessChain::Status::GetException() const
 {
+  if (this->SpawnResult) {
+    return std::make_pair(ExceptionCode::Spawn,
+                          uv_strerror(this->SpawnResult));
+  }
 #ifdef _WIN32
-  if ((this->ExitStatus & 0xF0000000) == 0xC0000000) {
+  if (this->Finished && (this->ExitStatus & 0xF0000000) == 0xC0000000) {
     // Child terminated due to exceptional behavior.
     switch (this->ExitStatus) {
       case STATUS_CONTROL_C_EXIT:
@@ -511,9 +570,8 @@ cmUVProcessChain::Status::GetException() const
       }
     }
   }
-  return std::make_pair(ExceptionCode::None, "");
 #else
-  if (this->TermSignal) {
+  if (this->Finished && this->TermSignal) {
     switch (this->TermSignal) {
 #  ifdef SIGSEGV
       case SIGSEGV:
@@ -670,6 +728,12 @@ cmUVProcessChain::Status::GetException() const
       }
     }
   }
-  return std::make_pair(ExceptionCode::None, "");
 #endif
+  return std::make_pair(ExceptionCode::None, "");
+}
+
+void cmUVProcessChain::InternalData::ProcessData::Finish()
+{
+  this->ProcessStatus.Finished = true;
+  this->Data->ProcessesCompleted++;
 }

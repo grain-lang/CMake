@@ -1,5 +1,5 @@
 /* Distributed under the OSI-approved BSD 3-Clause License.  See accompanying
-   file Copyright.txt or https://cmake.org/licensing for details.  */
+   file LICENSE.rst or https://cmake.org/licensing for details.  */
 #pragma once
 
 #include "cmConfigure.h" // IWYU pragma: keep
@@ -13,7 +13,6 @@
 #include "cmGlobalVisualStudio10Generator.h"
 #include "cmTransformDepfile.h"
 
-class cmGlobalGeneratorFactory;
 class cmMakefile;
 class cmake;
 
@@ -21,10 +20,6 @@ class cmake;
 class cmGlobalVisualStudio11Generator : public cmGlobalVisualStudio10Generator
 {
 public:
-  static std::unique_ptr<cmGlobalGeneratorFactory> NewFactory();
-
-  bool MatchesGeneratorName(const std::string& name) const override;
-
   void EnableLanguage(std::vector<std::string> const& languages, cmMakefile*,
                       bool optional) override;
 
@@ -36,8 +31,7 @@ public:
   }
 
 protected:
-  cmGlobalVisualStudio11Generator(cmake* cm, const std::string& name,
-                                  std::string const& platformInGeneratorName);
+  cmGlobalVisualStudio11Generator(cmake* cm, std::string const& name);
 
   bool InitializeWindowsPhone(cmMakefile* mf) override;
   bool InitializeWindowsStore(cmMakefile* mf) override;
@@ -58,8 +52,4 @@ protected:
 
   /** Return true if target system supports debugging deployment. */
   bool TargetSystemSupportsDeployment() const override;
-
-private:
-  class Factory;
-  friend class Factory;
 };

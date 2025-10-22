@@ -1,5 +1,5 @@
 /* Distributed under the OSI-approved BSD 3-Clause License.  See accompanying
-   file Copyright.txt or https://cmake.org/licensing for details.  */
+   file LICENSE.rst or https://cmake.org/licensing for details.  */
 
 #include "cmBinUtilsMacOSMachOOToolGetRuntimeDependenciesTool.h"
 
@@ -9,6 +9,7 @@
 
 #include "cmRuntimeDependencyArchive.h"
 #include "cmUVProcessChain.h"
+#include "cmUVStream.h"
 
 cmBinUtilsMacOSMachOOToolGetRuntimeDependenciesTool::
   cmBinUtilsMacOSMachOOToolGetRuntimeDependenciesTool(
@@ -34,7 +35,7 @@ bool cmBinUtilsMacOSMachOOToolGetRuntimeDependenciesTool::GetFileInfo(
     .AddCommand(command);
 
   auto process = builder.Start();
-  if (!process.Valid()) {
+  if (!process.Valid() || process.GetStatus(0).SpawnResult != 0) {
     std::ostringstream e;
     e << "Failed to start otool process for:\n  " << file;
     this->SetError(e.str());
@@ -42,18 +43,19 @@ bool cmBinUtilsMacOSMachOOToolGetRuntimeDependenciesTool::GetFileInfo(
   }
 
   std::string line;
-  static const cmsys::RegularExpression rpathRegex("^ *cmd LC_RPATH$");
-  static const cmsys::RegularExpression loadDylibRegex(
+  static cmsys::RegularExpression const rpathRegex("^ *cmd LC_RPATH$");
+  static cmsys::RegularExpression const loadDylibRegex(
     "^ *cmd LC_LOAD(_WEAK)?_DYLIB$");
-  static const cmsys::RegularExpression pathRegex(
+  static cmsys::RegularExpression const pathRegex(
     "^ *path (.*) \\(offset [0-9]+\\)$");
-  static const cmsys::RegularExpression nameRegex(
+  static cmsys::RegularExpression const nameRegex(
     "^ *name (.*) \\(offset [0-9]+\\)$");
-  while (std::getline(*process.OutputStream(), line)) {
+  cmUVPipeIStream output(process.GetLoop(), process.OutputStream());
+  while (std::getline(output, line)) {
     cmsys::RegularExpressionMatch cmdMatch;
     if (rpathRegex.find(line.c_str(), cmdMatch)) {
-      if (!std::getline(*process.OutputStream(), line) ||
-          !std::getline(*process.OutputStream(), line)) {
+      // NOLINTNEXTLINE(misc-redundant-expression)
+      if (!std::getline(output, line) || !std::getline(output, line)) {
         this->SetError("Invalid output from otool");
         return false;
       }
@@ -66,8 +68,8 @@ bool cmBinUtilsMacOSMachOOToolGetRuntimeDependenciesTool::GetFileInfo(
         return false;
       }
     } else if (loadDylibRegex.find(line.c_str(), cmdMatch)) {
-      if (!std::getline(*process.OutputStream(), line) ||
-          !std::getline(*process.OutputStream(), line)) {
+      // NOLINTNEXTLINE(misc-redundant-expression)
+      if (!std::getline(output, line) || !std::getline(output, line)) {
         this->SetError("Invalid output from otool");
         return false;
       }
@@ -88,8 +90,7 @@ bool cmBinUtilsMacOSMachOOToolGetRuntimeDependenciesTool::GetFileInfo(
     this->SetError(e.str());
     return false;
   }
-  auto status = process.GetStatus();
-  if (!status[0] || status[0]->ExitStatus != 0) {
+  if (process.GetStatus(0).ExitStatus != 0) {
     std::ostringstream e;
     e << "Failed to run otool on:\n  " << file;
     this->SetError(e.str());

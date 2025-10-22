@@ -34,7 +34,7 @@ else()
     target_compile_definitions(TestTimeout PRIVATE SIGNAL)
     set_tests_properties(TestTimeout PROPERTIES
       TIMEOUT_SIGNAL_NAME SIGUSR1
-      TIMEOUT_SIGNAL_GRACE_PERIOD 1.2
+      TIMEOUT_SIGNAL_GRACE_PERIOD 32.1
       )
 ]])
   run_ctest_timeout(Signal)
@@ -91,6 +91,13 @@ endblock()
 block()
   set(TIMEOUT 4)
   set(CASE_TEST_PREFIX_CODE "set(CTEST_TEST_TIMEOUT 2)")
-  set(CASE_CMAKELISTS_SUFFIX_CODE "set_property(TEST TestTimeout PROPERTY TIMEOUT 10)\n")
-  run_ctest_timeout(PropertyOverridesScript)
+  set(CASE_CMAKELISTS_SUFFIX_CODE "set_property(TEST TestTimeout PROPERTY TIMEOUT 60)\n")
+  run_ctest_timeout(PropertyOverridesVar)
+endblock()
+
+block()
+  set(TIMEOUT 4)
+  set(CASE_TEST_PREFIX_CODE "set(CTEST_TEST_TIMEOUT 2)")
+  set(CASE_CMAKELISTS_SUFFIX_CODE "set_property(TEST TestTimeout PROPERTY TIMEOUT)\n")
+  run_ctest_timeout(FlagOverridesVar --timeout 10000001)
 endblock()

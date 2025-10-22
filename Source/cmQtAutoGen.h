@@ -1,11 +1,12 @@
 /* Distributed under the OSI-approved BSD 3-Clause License.  See accompanying
-   file Copyright.txt or https://cmake.org/licensing for details.  */
+   file LICENSE.rst or https://cmake.org/licensing for details.  */
 #pragma once
 
 #include "cmConfigure.h" // IWYU pragma: keep
 
 #include <memory>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 #include <cm/string_view>
@@ -16,6 +17,22 @@
 class cmQtAutoGen
 {
 public:
+  /** String value with per configuration variants.  */
+  class ConfigString
+  {
+  public:
+    std::string Default;
+    std::unordered_map<std::string, std::string> Config;
+  };
+
+  /** String values with per configuration variants.  */
+  template <typename C>
+  class ConfigStrings
+  {
+  public:
+    C Default;
+    std::unordered_map<std::string, C> Config;
+  };
   /** Integer version.  */
   struct IntegerVersion
   {
@@ -64,11 +81,6 @@ public:
   /// @brief Maximum number of parallel threads/processes in a generator
   static unsigned int const ParallelMax;
 
-#ifdef _WIN32
-  /// @brief Maximum number of characters on command line
-  static size_t const CommandLineLengthMax;
-#endif
-
   /// @brief Returns the generator name
   static cm::string_view GeneratorName(GenT genType);
   /// @brief Returns the generator name in upper case
@@ -115,10 +127,10 @@ public:
     RccLister(std::string rccExecutable, std::vector<std::string> listOptions);
 
     //! The rcc executable
-    std::string const& RccExcutable() const { return this->RccExcutable_; }
+    std::string const& RccExecutable() const { return this->RccExecutable_; }
     void SetRccExecutable(std::string const& rccExecutable)
     {
-      this->RccExcutable_ = rccExecutable;
+      this->RccExecutable_ = rccExecutable;
     }
 
     //! The rcc executable list options
@@ -140,7 +152,7 @@ public:
               std::string& error, bool verbose = false) const;
 
   private:
-    std::string RccExcutable_;
+    std::string RccExecutable_;
     std::vector<std::string> ListOptions_;
   };
 };

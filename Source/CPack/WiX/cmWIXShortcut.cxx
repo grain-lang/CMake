@@ -1,5 +1,5 @@
 /* Distributed under the OSI-approved BSD 3-Clause License.  See accompanying
-   file Copyright.txt or https://cmake.org/licensing for details.  */
+   file LICENSE.rst or https://cmake.org/licensing for details.  */
 #include "cmWIXShortcut.h"
 
 #include "cmWIXFilesSourceWriter.h"
@@ -20,7 +20,7 @@ bool cmWIXShortcuts::EmitShortcuts(
   std::string const& cpackComponentName,
   cmWIXFilesSourceWriter& fileDefinitions) const
 {
-  shortcut_type_map_t::const_iterator i = this->Shortcuts.find(type);
+  auto i = this->Shortcuts.find(type);
 
   if (i == this->Shortcuts.end()) {
     return false;

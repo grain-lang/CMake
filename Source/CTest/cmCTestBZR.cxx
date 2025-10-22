@@ -1,5 +1,5 @@
 /* Distributed under the OSI-approved BSD 3-Clause License.  See accompanying
-   file Copyright.txt or https://cmake.org/licensing for details.  */
+   file LICENSE.rst or https://cmake.org/licensing for details.  */
 #include "cmCTestBZR.h"
 
 #include <cstdlib>
@@ -16,15 +16,15 @@
 
 #include "cmCTest.h"
 #include "cmCTestVC.h"
-#include "cmProcessTools.h"
+#include "cmMakefile.h"
 #include "cmSystemTools.h"
 #include "cmXMLParser.h"
 
 static int cmBZRXMLParserUnknownEncodingHandler(void* /*unused*/,
-                                                const XML_Char* name,
+                                                XML_Char const* name,
                                                 XML_Encoding* info)
 {
-  static const int latin1[] = {
+  static int const latin1[] = {
     0x0000, 0x0001, 0x0002, 0x0003, 0x0004, 0x0005, 0x0006, 0x0007, 0x0008,
     0x0009, 0x000A, 0x000B, 0x000C, 0x000D, 0x000E, 0x000F, 0x0010, 0x0011,
     0x0012, 0x0013, 0x0014, 0x0015, 0x0016, 0x0017, 0x0018, 0x0019, 0x001A,
@@ -71,8 +71,8 @@ static int cmBZRXMLParserUnknownEncodingHandler(void* /*unused*/,
   return 0;
 }
 
-cmCTestBZR::cmCTestBZR(cmCTest* ct, std::ostream& log)
-  : cmCTestGlobalVC(ct, log)
+cmCTestBZR::cmCTestBZR(cmCTest* ct, cmMakefile* mf, std::ostream& log)
+  : cmCTestGlobalVC(ct, mf, log)
 {
   this->PriorRev = this->Unknown;
   // Even though it is specified in the documentation, with bzr 1.13
@@ -86,7 +86,7 @@ cmCTestBZR::~cmCTestBZR() = default;
 class cmCTestBZR::InfoParser : public cmCTestVC::LineParser
 {
 public:
-  InfoParser(cmCTestBZR* bzr, const char* prefix)
+  InfoParser(cmCTestBZR* bzr, char const* prefix)
     : BZR(bzr)
   {
     this->SetLog(&bzr->Log, prefix);
@@ -114,7 +114,7 @@ private:
 class cmCTestBZR::RevnoParser : public cmCTestVC::LineParser
 {
 public:
-  RevnoParser(cmCTestBZR* bzr, const char* prefix, std::string& rev)
+  RevnoParser(cmCTestBZR* bzr, char const* prefix, std::string& rev)
     : Rev(rev)
   {
     this->SetLog(&bzr->Log, prefix);
@@ -136,14 +136,14 @@ private:
 std::string cmCTestBZR::LoadInfo()
 {
   // Run "bzr info" to get the repository info from the work tree.
-  const char* bzr = this->CommandLineTool.c_str();
-  const char* bzr_info[] = { bzr, "info", nullptr };
+  std::string bzr = this->CommandLineTool;
+  std::vector<std::string> bzr_info = { bzr, "info" };
   InfoParser iout(this, "info-out> ");
   OutputLogger ierr(this->Log, "info-err> ");
   this->RunChild(bzr_info, &iout, &ierr);
 
   // Run "bzr revno" to get the repository revision number from the work tree.
-  const char* bzr_revno[] = { bzr, "revno", nullptr };
+  std::vector<std::string> bzr_revno = { bzr, "revno" };
   std::string rev;
   RevnoParser rout(this, "revno-out> ", rev);
   OutputLogger rerr(this->Log, "revno-err> ");
@@ -179,7 +179,7 @@ class cmCTestBZR::LogParser
   , private cmXMLParser
 {
 public:
-  LogParser(cmCTestBZR* bzr, const char* prefix)
+  LogParser(cmCTestBZR* bzr, char const* prefix)
     : OutputLogger(bzr->Log, prefix)
     , BZR(bzr)
     , EmailRegex("(.*) <([A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+)>")
@@ -211,14 +211,14 @@ private:
 
   cmsys::RegularExpression EmailRegex;
 
-  bool ProcessChunk(const char* data, int length) override
+  bool ProcessChunk(char const* data, int length) override
   {
     this->OutputLogger::ProcessChunk(data, length);
     this->ParseChunk(data, length);
     return true;
   }
 
-  void StartElement(const std::string& name, const char** /*atts*/) override
+  void StartElement(std::string const& name, char const** /*atts*/) override
   {
     this->CData.clear();
     if (name == "log") {
@@ -243,12 +243,12 @@ private:
     }
   }
 
-  void CharacterDataHandler(const char* data, int length) override
+  void CharacterDataHandler(char const* data, int length) override
   {
     cm::append(this->CData, data, data + length);
   }
 
-  void EndElement(const std::string& name) override
+  void EndElement(std::string const& name) override
   {
     if (name == "log") {
       this->BZR->DoRevision(this->Rev, this->Changes);
@@ -278,7 +278,7 @@ private:
     this->CData.clear();
   }
 
-  void ReportError(int /*line*/, int /*column*/, const char* msg) override
+  void ReportError(int /*line*/, int /*column*/, char const* msg) override
   {
     this->BZR->Log << "Error parsing bzr log xml: " << msg << "\n";
   }
@@ -287,7 +287,7 @@ private:
 class cmCTestBZR::UpdateParser : public cmCTestVC::LineParser
 {
 public:
-  UpdateParser(cmCTestBZR* bzr, const char* prefix)
+  UpdateParser(cmCTestBZR* bzr, char const* prefix)
     : BZR(bzr)
   {
     this->SetLog(&bzr->Log, prefix);
@@ -298,12 +298,12 @@ private:
   cmCTestBZR* BZR;
   cmsys::RegularExpression RegexUpdate;
 
-  bool ProcessChunk(const char* first, int length) override
+  bool ProcessChunk(char const* first, int length) override
   {
     bool last_is_new_line = (*first == '\r' || *first == '\n');
 
-    const char* const last = first + length;
-    for (const char* c = first; c != last; ++c) {
+    char const* const last = first + length;
+    for (char const* c = first; c != last; ++c) {
       if (*c == '\r' || *c == '\n') {
         if (!last_is_new_line) {
           // Log this line.
@@ -346,8 +346,8 @@ private:
     }
     cmSystemTools::ConvertToUnixSlashes(path);
 
-    const std::string dir = cmSystemTools::GetFilenamePath(path);
-    const std::string name = cmSystemTools::GetFilenameName(path);
+    std::string const dir = cmSystemTools::GetFilenamePath(path);
+    std::string const name = cmSystemTools::GetFilenameName(path);
 
     if (c0 == 'C') {
       this->BZR->Dirs[dir][name].Status = PathConflicting;
@@ -364,31 +364,27 @@ private:
 bool cmCTestBZR::UpdateImpl()
 {
   // Get user-specified update options.
-  std::string opts = this->CTest->GetCTestConfiguration("UpdateOptions");
+  std::string opts = this->Makefile->GetSafeDefinition("CTEST_UPDATE_OPTIONS");
   if (opts.empty()) {
-    opts = this->CTest->GetCTestConfiguration("BZRUpdateOptions");
+    opts = this->Makefile->GetSafeDefinition("CTEST_BZR_UPDATE_OPTIONS");
   }
   std::vector<std::string> args = cmSystemTools::ParseArguments(opts);
 
   // TODO: if(this->CTest->GetTestModel() == cmCTest::NIGHTLY)
 
   // Use "bzr pull" to update the working tree.
-  std::vector<char const*> bzr_update;
-  bzr_update.push_back(this->CommandLineTool.c_str());
-  bzr_update.push_back("pull");
+  std::vector<std::string> bzr_update;
+  bzr_update.push_back(this->CommandLineTool);
+  bzr_update.emplace_back("pull");
 
-  for (std::string const& arg : args) {
-    bzr_update.push_back(arg.c_str());
-  }
+  cm::append(bzr_update, args);
 
-  bzr_update.push_back(this->URL.c_str());
-
-  bzr_update.push_back(nullptr);
+  bzr_update.push_back(this->URL);
 
   // For some reason bzr uses stderr to display the update status.
   OutputLogger out(this->Log, "pull-out> ");
   UpdateParser err(this, "pull-err> ");
-  return this->RunUpdateCommand(bzr_update.data(), &out, &err);
+  return this->RunUpdateCommand(bzr_update, &out, &err);
 }
 
 bool cmCTestBZR::LoadRevisions()
@@ -409,10 +405,9 @@ bool cmCTestBZR::LoadRevisions()
   }
 
   // Run "bzr log" to get all global revisions of interest.
-  const char* bzr = this->CommandLineTool.c_str();
-  const char* bzr_log[] = {
-    bzr, "log", "-v", "-r", revs.c_str(), "--xml", this->URL.c_str(), nullptr
-  };
+  std::string bzr = this->CommandLineTool;
+  std::vector<std::string> bzr_log = { bzr,  "log",   "-v",     "-r",
+                                       revs, "--xml", this->URL };
   {
     LogParser out(this, "log-out> ");
     OutputLogger err(this->Log, "log-err> ");
@@ -425,7 +420,7 @@ bool cmCTestBZR::LoadRevisions()
 class cmCTestBZR::StatusParser : public cmCTestVC::LineParser
 {
 public:
-  StatusParser(cmCTestBZR* bzr, const char* prefix)
+  StatusParser(cmCTestBZR* bzr, char const* prefix)
     : BZR(bzr)
   {
     this->SetLog(&bzr->Log, prefix);
@@ -468,8 +463,8 @@ private:
 bool cmCTestBZR::LoadModifications()
 {
   // Run "bzr status" which reports local modifications.
-  const char* bzr = this->CommandLineTool.c_str();
-  const char* bzr_status[] = { bzr, "status", "-SV", nullptr };
+  std::string bzr = this->CommandLineTool;
+  std::vector<std::string> bzr_status = { bzr, "status", "-SV" };
   StatusParser out(this, "status-out> ");
   OutputLogger err(this->Log, "status-err> ");
   this->RunChild(bzr_status, &out, &err);

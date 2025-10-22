@@ -1,10 +1,9 @@
 /* Distributed under the OSI-approved BSD 3-Clause License.  See accompanying
-   file Copyright.txt or https://cmake.org/licensing for details.  */
+   file LICENSE.rst or https://cmake.org/licensing for details.  */
 #pragma once
 
 #include "cmConfigure.h" // IWYU pragma: keep
 
-#include <iosfwd>
 #include <map>
 #include <memory>
 #include <set>
@@ -22,6 +21,7 @@ class cmGeneratorTarget;
 class cmGlobalGenerator;
 class cmMakefile;
 class cmOrderDirectories;
+class cmSourceFile;
 class cmake;
 
 /** \class cmComputeLinkInformation
@@ -34,9 +34,9 @@ private:
 
 public:
   cmComputeLinkInformation(cmGeneratorTarget const* target,
-                           const std::string& config);
-  cmComputeLinkInformation(const cmComputeLinkInformation&) = delete;
-  cmComputeLinkInformation& operator=(const cmComputeLinkInformation&) =
+                           std::string const& config);
+  cmComputeLinkInformation(cmComputeLinkInformation const&) = delete;
+  cmComputeLinkInformation& operator=(cmComputeLinkInformation const&) =
     delete;
   ~cmComputeLinkInformation();
   bool Compute();
@@ -51,19 +51,24 @@ public:
   {
     Item(BT<std::string> v, ItemIsPath isPath,
          cmGeneratorTarget const* target = nullptr,
+         cmSourceFile const* objectSource = nullptr,
          FeatureDescriptor const* feature = nullptr)
       : Value(std::move(v))
       , IsPath(isPath)
       , Target(target)
+      , ObjectSource(objectSource)
       , Feature(feature)
     {
     }
     BT<std::string> Value;
     ItemIsPath IsPath = ItemIsPath::No;
     cmGeneratorTarget const* Target = nullptr;
+    // The source file representing the external object (used when linking
+    // `$<TARGET_OBJECTS>`)
+    cmSourceFile const* ObjectSource = nullptr;
 
     bool HasFeature() const { return this->Feature != nullptr; }
-    const std::string& GetFeatureName() const
+    std::string const& GetFeatureName() const
     {
       return HasFeature() ? this->Feature->Name
                           : cmComputeLinkDepends::LinkEntry::DEFAULT;
@@ -71,7 +76,7 @@ public:
 
     BT<std::string> GetFormattedItem(std::string const& path) const
     {
-      return { (this->Feature != nullptr)
+      return { this->Feature
                  ? this->Feature->GetDecoratedItem(path, this->IsPath)
                  : path,
                Value.Backtrace };
@@ -88,6 +93,7 @@ public:
   std::vector<std::string> const& GetDepends() const;
   std::vector<std::string> const& GetFrameworkPaths() const;
   std::set<std::string> const& GetFrameworkPathsEmitted() const;
+  std::vector<std::string> const& GetXcFrameworkHeaderPaths() const;
   std::string GetLinkLanguage() const { return this->LinkLanguage; }
   std::vector<std::string> const& GetRuntimeSearchPath() const;
   std::string const& GetRuntimeFlag() const { return this->RuntimeFlag; }
@@ -96,7 +102,7 @@ public:
   std::string GetRPathString(bool for_install) const;
   std::string GetChrpathString() const;
   std::set<cmGeneratorTarget const*> const& GetSharedLibrariesLinked() const;
-  std::vector<cmGeneratorTarget const*> const& GetObjectLibrariesLinked()
+  std::vector<cmGeneratorTarget const*> const& GetExternalObjectTargets()
     const;
   std::vector<cmGeneratorTarget const*> const& GetRuntimeDLLs() const
   {
@@ -118,7 +124,7 @@ public:
 
   std::string GetConfig() const { return this->Config; }
 
-  const cmGeneratorTarget* GetTarget() { return this->Target; }
+  cmGeneratorTarget const* GetTarget() { return this->Target; }
 
 private:
   using LinkEntry = cmComputeLinkDepends::LinkEntry;
@@ -132,9 +138,10 @@ private:
   std::vector<std::string> Directories;
   std::vector<std::string> Depends;
   std::vector<std::string> FrameworkPaths;
+  std::vector<std::string> XcFrameworkHeaderPaths;
   std::vector<std::string> RuntimeSearchPath;
   std::set<cmGeneratorTarget const*> SharedLibrariesLinked;
-  std::vector<cmGeneratorTarget const*> ObjectLibrariesLinked;
+  std::vector<cmGeneratorTarget const*> ExternalObjectTargets;
   std::vector<cmGeneratorTarget const*> RuntimeDLLs;
 
   // Context information.
@@ -202,22 +209,24 @@ private:
   void AddTargetItem(LinkEntry const& entry);
   void AddFullItem(LinkEntry const& entry);
   bool CheckImplicitDirItem(LinkEntry const& entry);
-  void AddUserItem(LinkEntry const& entry, bool pathNotKnown);
+  void AddUserItem(LinkEntry const& entry);
   void AddFrameworkItem(LinkEntry const& entry);
+  void AddXcFrameworkItem(LinkEntry const& entry);
   void DropDirectoryItem(BT<std::string> const& item);
   bool CheckSharedLibNoSOName(LinkEntry const& entry);
   void AddSharedLibNoSOName(LinkEntry const& entry);
-  void HandleBadFullItem(LinkEntry const& entry, std::string const& file);
 
   // Framework info.
   void ComputeFrameworkInfo();
   void AddFrameworkPath(std::string const& p);
   std::set<std::string> FrameworkPathsEmitted;
 
+  void AddXcFrameworkHeaderPath(std::string const& p);
+
   // Linker search path computation.
   std::unique_ptr<cmOrderDirectories> OrderLinkerSearchPath;
-  bool FinishLinkerSearchDirectories();
-  void PrintLinkPolicyDiagnosis(std::ostream&);
+
+  void AddExternalObjectTargets();
 
   // Implicit link libraries and directories for linker language.
   void LoadImplicitLinkInfo();
@@ -230,28 +239,21 @@ private:
   // Additional paths configured by the runtime linker
   std::vector<std::string> RuntimeLinkDirs;
 
-  // Linker search path compatibility mode.
-  std::set<std::string> OldLinkDirMask;
-  std::vector<std::string> OldLinkDirItems;
-  std::vector<std::string> OldUserFlagItems;
-  std::set<std::string> CMP0060WarnItems;
   // Dependent library path computation.
   std::unique_ptr<cmOrderDirectories> OrderDependentRPath;
   // Runtime path computation.
   std::unique_ptr<cmOrderDirectories> OrderRuntimeSearchPath;
 
-  bool OldLinkDirMode;
-  bool OpenBSD;
+  bool IsOpenBSD;
   bool LinkDependsNoShared;
   bool RuntimeUseChrpath;
   bool NoSONameUsesPath;
   bool LinkWithRuntimePath;
   bool LinkTypeEnabled;
   bool ArchivesMayBeShared;
-  bool CMP0060Warn;
 
   void AddLibraryRuntimeInfo(std::string const& fullPath,
-                             const cmGeneratorTarget* target);
+                             cmGeneratorTarget const* target);
   void AddLibraryRuntimeInfo(std::string const& fullPath);
 
   class FeatureDescriptor
@@ -259,10 +261,10 @@ private:
   public:
     FeatureDescriptor() = default;
 
-    const std::string Name;
-    const bool Supported = false;
-    const std::string Prefix;
-    const std::string Suffix;
+    std::string const Name;
+    bool const Supported = false;
+    std::string const Prefix;
+    std::string const Suffix;
     std::string GetDecoratedItem(std::string const& library,
                                  ItemIsPath isPath) const;
     std::string GetDecoratedItem(std::string const& library,

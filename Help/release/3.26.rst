@@ -42,6 +42,10 @@ File-Based API
   gained a new ``fileSets`` field and associated ``fileSetIndex``
   field to ``sources`` objects.
 
+* The :manual:`cmake-file-api(7)` "codemodel" version 2 "directory"
+  object ``installers`` field gained a new ``cxxModuleBmi`` installer type
+  and an associated ``cxxModuleBmiTarget`` field.
+
 * The :manual:`cmake-file-api(7)` gained a new "configureLog" object kind
   that enables stable access to the :manual:`cmake-configure-log(7)`.
 
@@ -181,3 +185,13 @@ Changes made since CMake 3.26.0 include the following.
 * These versions made no changes to documented features or interfaces.
   Some implementation updates were made to support ecosystem changes
   and/or fix regressions.
+
+3.26.6
+------
+
+* The :manual:`cmake-file-api(7)` "codemodel" version 2 "target" object
+  ``fileSets`` field was introduced by CMake 3.26.0 with entries of its
+  ``baseDirectories`` member incorrectly expressed as absolute paths
+  even if they are inside the top-level source directory.  This has
+  been fixed.  Clients must be updated to expect relative paths under
+  the top-level source directory.

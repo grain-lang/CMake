@@ -1,9 +1,8 @@
 /* Distributed under the OSI-approved BSD 3-Clause License.  See accompanying
-   file Copyright.txt or https://cmake.org/licensing for details.  */
+   file LICENSE.rst or https://cmake.org/licensing for details.  */
 #include "cmRST.h"
 
 #include <algorithm>
-#include <cctype>
 #include <cstddef>
 #include <iterator>
 #include <utility>
@@ -159,7 +158,7 @@ void cmRST::ProcessLine(std::string const& line)
   // A line starting in .. is an explicit markup start.
   if (line == ".." ||
       (line.size() >= 3 && line[0] == '.' && line[1] == '.' &&
-       isspace(line[2]))) {
+       cmIsSpace(line[2]))) {
     this->Reset();
     this->MarkupType =
       (line.find_first_not_of(" \t", 2) == std::string::npos ? Markup::Empty
@@ -219,7 +218,7 @@ void cmRST::ProcessLine(std::string const& line)
   }
   // Indented lines following an explicit markup start are explicit markup.
   else if (this->MarkupType != Markup::None &&
-           (line.empty() || isspace(line[0]))) {
+           (line.empty() || cmIsSpace(line[0]))) {
     this->MarkupType = Markup::Normal;
     // Record markup lines if the start line was recorded.
     if (!this->MarkupLines.empty()) {
@@ -349,7 +348,7 @@ void cmRST::OutputMarkupLines(bool inlineMarkup)
 {
   for (auto line : this->MarkupLines) {
     if (!line.empty()) {
-      line = cmStrCat(" ", line);
+      line = cmStrCat(' ', line);
     }
     this->OutputLine(line, inlineMarkup);
   }

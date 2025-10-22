@@ -1,5 +1,5 @@
 # Distributed under the OSI-approved BSD 3-Clause License.  See accompanying
-# file Copyright.txt or https://cmake.org/licensing for details.
+# file LICENSE.rst or https://cmake.org/licensing for details.
 
 
 # This file is included by cmGlobalGenerator::EnableLanguage.
@@ -17,6 +17,7 @@ unset(MSYS)
 unset(WIN32)
 unset(BSD)
 unset(LINUX)
+unset(AIX)
 
 # The CMAKE_EFFECTIVE_SYSTEM_NAME is used to load compiler and compiler
 # wrapper configuration files. By default it equals to CMAKE_SYSTEM_NAME
@@ -25,7 +26,7 @@ unset(LINUX)
 # It is useful to share the same aforementioned configuration files and
 # avoids duplicating them in case of tightly related platforms.
 #
-# An example are the platforms supported by Xcode (macOS, iOS, tvOS,
+# An example are the platforms supported by Xcode (macOS, iOS, tvOS, visionOS
 # and watchOS). For all of those the CMAKE_EFFECTIVE_SYSTEM_NAME is
 # set to Apple which results in using
 # Platform/Apple-AppleClang-CXX.cmake for the Apple C++ compiler.

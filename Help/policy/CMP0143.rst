@@ -16,15 +16,16 @@ as ``OFF`` by default unless projects enable the feature.  For example:
 
 CMake 3.26 and later prefer to enable the feature by default.
 
-Note that it is the policy setting at the `end` of the top level
+Note that it is the policy setting at the **end** of the top level
 ``CMakeLists.txt`` file that matters.  The policy setting applies globally
 to the whole project.
 
 This policy provides compatibility with projects that have not been updated
 to expect enabling of folders.  Enabling folders causes projects to appear
-differently in IDEs.  The policy was introduced in CMake version 3.26.  Use the
-:command:`cmake_policy` command to set it to ``OLD`` or ``NEW`` explicitly.
-Unlike many policies, CMake version |release| does *not* warn
-when this policy is not set and simply uses ``OLD`` behavior.
+differently in IDEs.
 
-.. include:: DEPRECATED.txt
+.. |INTRODUCED_IN_CMAKE_VERSION| replace:: 3.26
+.. |WARNS_OR_DOES_NOT_WARN| replace:: does *not* warn
+.. include:: include/STANDARD_ADVICE.rst
+
+.. include:: include/DEPRECATED.rst

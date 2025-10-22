@@ -25,10 +25,9 @@ which it is used, it is the project's responsibility to use the
 :prop_tgt:`POSITION_INDEPENDENT_CODE` target property for executables will be
 honored at link time.
 
-This policy was introduced in CMake version 3.14. Use the
-:command:`cmake_policy` command to set it to ``OLD`` or ``NEW`` explicitly.
-Unlike most policies, CMake version |release| does not warn when this policy is
-not set and simply uses ``OLD`` behavior.
+.. |INTRODUCED_IN_CMAKE_VERSION| replace:: 3.14
+.. |WARNS_OR_DOES_NOT_WARN| replace:: does *not* warn
+.. include:: include/STANDARD_ADVICE.rst
 
 .. Note::
 
@@ -36,7 +35,7 @@ not set and simply uses ``OLD`` behavior.
    to use the :module:`CheckPIESupported` module to ensure flags are passed to
    the linker.
 
-.. include:: DEPRECATED.txt
+.. include:: include/DEPRECATED.rst
 
 Examples
 ^^^^^^^^

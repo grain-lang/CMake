@@ -1,5 +1,5 @@
 /* Distributed under the OSI-approved BSD 3-Clause License.  See accompanying
-   file Copyright.txt or https://cmake.org/licensing for details.  */
+   file LICENSE.rst or https://cmake.org/licensing for details.  */
 #pragma once
 
 #include <map>
@@ -24,8 +24,8 @@ public:
   cmCPackTypeMacro(cmCPackWIXGenerator, cmCPackGenerator);
 
   cmCPackWIXGenerator();
-  cmCPackWIXGenerator(const cmCPackWIXGenerator&) = delete;
-  const cmCPackWIXGenerator& operator=(const cmCPackWIXGenerator&) = delete;
+  cmCPackWIXGenerator(cmCPackWIXGenerator const&) = delete;
+  cmCPackWIXGenerator const& operator=(cmCPackWIXGenerator const&) = delete;
   ~cmCPackWIXGenerator();
 
 protected:
@@ -33,7 +33,7 @@ protected:
 
   int PackageFiles() override;
 
-  const char* GetOutputExtension() override { return ".msi"; }
+  char const* GetOutputExtension() override { return ".msi"; }
 
   enum CPackSetDestdirSupport SupportsSetDestdir() const override
   {
@@ -59,6 +59,8 @@ private:
   bool InitializeWiXConfiguration();
 
   bool PackageFilesImpl();
+  bool PackageWithWix();
+  bool PackageWithWix3();
 
   void CreateWiXVariablesIncludeFile();
 
@@ -160,6 +162,7 @@ private:
   id_map_t PathToIdMap;
   ambiguity_map_t IdAmbiguityCounter;
 
+  extension_set_t WixExtensions;
   extension_set_t CandleExtensions;
   extension_set_t LightExtensions;
   xmlns_map_t CustomXmlNamespaces;
@@ -167,6 +170,8 @@ private:
   std::string CPackTopLevel;
 
   std::unique_ptr<cmWIXPatch> Patch;
+
+  unsigned long WixVersion = 3;
 
   cmWIXSourceWriter::GuidType ComponentGuidType;
 };

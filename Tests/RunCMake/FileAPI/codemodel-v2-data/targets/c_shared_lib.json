@@ -16,7 +16,7 @@
             "backtrace": [
                 {
                     "file": "^codemodel-v2\\.cmake$",
-                    "line": 9,
+                    "line": 12,
                     "command": "add_library",
                     "hasParent": true
                 },
@@ -69,7 +69,7 @@
     "backtrace": [
         {
             "file": "^codemodel-v2\\.cmake$",
-            "line": 9,
+            "line": 12,
             "command": "add_library",
             "hasParent": true
         },
@@ -100,7 +100,7 @@
             "_dllExtra": false
         },
         {
-            "path": "^((Debug|Release|RelWithDebInfo|MinSizeRel)/)?(lib)?c_shared_lib\\.(dll\\.a|lib)$",
+            "path": "^((Debug|Release|RelWithDebInfo|MinSizeRel)/)?(lib)?c_shared_lib\\.(dll\\.a|lib|l)$",
             "_dllExtra": true
         },
         {
@@ -118,7 +118,7 @@
                 "backtrace": [
                     {
                         "file": "^codemodel-v2\\.cmake$",
-                        "line": 46,
+                        "line": 49,
                         "command": "install",
                         "hasParent": true
                     },
@@ -148,7 +148,7 @@
                 "backtrace": [
                     {
                         "file": "^codemodel-v2\\.cmake$",
-                        "line": 46,
+                        "line": 49,
                         "command": "install",
                         "hasParent": true
                     },
@@ -178,7 +178,7 @@
                 "backtrace": [
                     {
                         "file": "^codemodel-v2\\.cmake$",
-                        "line": 51,
+                        "line": 54,
                         "command": "install",
                         "hasParent": true
                     },

@@ -1,5 +1,5 @@
 /* Distributed under the OSI-approved BSD 3-Clause License.  See accompanying
-   file Copyright.txt or https://cmake.org/licensing for details.  */
+   file LICENSE.rst or https://cmake.org/licensing for details.  */
 #pragma once
 
 #include <iosfwd>
@@ -7,7 +7,7 @@
 #include <string>
 #include <vector>
 
-#include "cm_codecvt.hxx"
+#include "cm_codecvt_Encoding.hxx"
 
 #include "cmGlobalGeneratorFactory.h"
 #include "cmGlobalUnixMakefileGenerator3.h"
@@ -38,9 +38,10 @@ public:
   static std::string GetActualName() { return "NMake Makefiles"; }
 
   /** Get encoding used by generator for makefile files */
-  codecvt::Encoding GetMakefileEncoding() const override
+  codecvt_Encoding GetMakefileEncoding() const override
   {
-    return this->NMakeSupportsUTF8 ? codecvt::UTF8_WITH_BOM : codecvt::ANSI;
+    return this->NMakeSupportsUTF8 ? codecvt_Encoding::UTF8_WITH_BOM
+                                   : codecvt_Encoding::ANSI;
   }
 
   /** Get the documentation entry for this generator.  */
@@ -53,12 +54,14 @@ public:
   void EnableLanguage(std::vector<std::string> const& languages, cmMakefile*,
                       bool optional) override;
 
+  bool IsGNUMakeJobServerAware() const override { return false; }
+
 protected:
   std::vector<GeneratedMakeCommand> GenerateBuildCommand(
-    const std::string& makeProgram, const std::string& projectName,
-    const std::string& projectDir, std::vector<std::string> const& targetNames,
-    const std::string& config, int jobs, bool verbose,
-    const cmBuildOptions& buildOptions = cmBuildOptions(),
+    std::string const& makeProgram, std::string const& projectName,
+    std::string const& projectDir, std::vector<std::string> const& targetNames,
+    std::string const& config, int jobs, bool verbose,
+    cmBuildOptions const& buildOptions = cmBuildOptions(),
     std::vector<std::string> const& makeOptions =
       std::vector<std::string>()) override;
 

@@ -1,5 +1,5 @@
 /* Distributed under the OSI-approved BSD 3-Clause License.  See accompanying
-   file Copyright.txt or https://cmake.org/licensing for details.  */
+   file LICENSE.rst or https://cmake.org/licensing for details.  */
 #pragma once
 
 #include "cmConfigure.h" // IWYU pragma: keep
@@ -8,7 +8,7 @@
 
 #include "cmsys/FStream.hxx"
 
-#include "cm_codecvt.hxx"
+#include "cm_codecvt_Encoding.hxx"
 
 // This is the first base class of cmGeneratedFileStream.  It will be
 // created before and destroyed after the ofstream portion and can
@@ -77,13 +77,13 @@ class cmGeneratedFileStream
 {
 public:
   using Stream = cmsys::ofstream;
-  using Encoding = codecvt::Encoding;
+  using Encoding = codecvt_Encoding;
 
   /**
    * This constructor prepares a default stream.  The open method must
    * be used before writing to the stream.
    */
-  cmGeneratedFileStream(Encoding encoding = codecvt::None);
+  cmGeneratedFileStream(codecvt_Encoding encoding = codecvt_Encoding::None);
 
   /**
    * This constructor takes the name of the file to be generated.  It
@@ -92,7 +92,7 @@ public:
    * second argument is set to true.
    */
   cmGeneratedFileStream(std::string const& name, bool quiet = false,
-                        Encoding encoding = codecvt::None);
+                        codecvt_Encoding encoding = codecvt_Encoding::None);
 
   /**
    * The destructor checks the stream status to be sure the temporary
@@ -139,7 +139,7 @@ public:
    * Set name of the file that will hold the actual output. This method allows
    * the output file to be changed during the use of cmGeneratedFileStream.
    */
-  void SetName(const std::string& fname);
+  void SetName(std::string const& fname);
 
   /**
    * Set set a custom temporary file extension used with 'Open'.
@@ -148,8 +148,13 @@ public:
   void SetTempExt(std::string const& ext);
 
   /**
+   * Get the name of the temporary file.
+   */
+  std::string const& GetTempName() const { return this->TempName; }
+
+  /**
    * Write a specific string using an alternate encoding.
    * Afterward, the original encoding is restored.
    */
-  void WriteAltEncoding(std::string const& data, Encoding encoding);
+  void WriteAltEncoding(std::string const& data, codecvt_Encoding encoding);
 };

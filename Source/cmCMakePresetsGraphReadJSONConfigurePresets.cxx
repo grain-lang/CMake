@@ -1,5 +1,5 @@
 /* Distributed under the OSI-approved BSD 3-Clause License.  See accompanying
-   file Copyright.txt or https://cmake.org/licensing for details.  */
+   file LICENSE.rst or https://cmake.org/licensing for details.  */
 #include <cstddef>
 #include <functional>
 #include <map>
@@ -12,12 +12,13 @@
 
 #include <cm3p/json/value.h>
 
-#include "cmCMakePresetErrors.h"
+#include "cmCMakePresetsErrors.h"
 #include "cmCMakePresetsGraph.h"
 #include "cmCMakePresetsGraphInternal.h"
 #include "cmJSONHelpers.h"
-#include "cmJSONState.h"
 #include "cmStateTypes.h"
+
+class cmJSONState;
 
 namespace {
 using CacheVariable = cmCMakePresetsGraph::CacheVariable;
@@ -28,7 +29,7 @@ using TraceEnableMode = cmCMakePresetsGraph::TraceEnableMode;
 using TraceOutputFormat = cmTraceEnums::TraceOutputFormat;
 
 bool ArchToolsetStrategyHelper(cm::optional<ArchToolsetStrategy>& out,
-                               const Json::Value* value, cmJSONState* state)
+                               Json::Value const* value, cmJSONState* state)
 {
   if (!value) {
     out = cm::nullopt;
@@ -36,7 +37,7 @@ bool ArchToolsetStrategyHelper(cm::optional<ArchToolsetStrategy>& out,
   }
 
   if (!value->isString()) {
-    cmCMakePresetErrors::INVALID_PRESET(value, state);
+    cmCMakePresetsErrors::INVALID_PRESET(value, state);
     return false;
   }
 
@@ -50,11 +51,11 @@ bool ArchToolsetStrategyHelper(cm::optional<ArchToolsetStrategy>& out,
     return true;
   }
 
-  cmCMakePresetErrors::INVALID_PRESET(value, state);
+  cmCMakePresetsErrors::INVALID_PRESET(value, state);
   return false;
 }
 
-std::function<bool(ConfigurePreset&, const Json::Value*, cmJSONState*)>
+std::function<bool(ConfigurePreset&, Json::Value const*, cmJSONState*)>
 ArchToolsetHelper(
   std::string ConfigurePreset::*valueField,
   cm::optional<ArchToolsetStrategy> ConfigurePreset::*strategyField)
@@ -66,7 +67,7 @@ ArchToolsetHelper(
             cmCMakePresetsGraphInternal::PresetStringHelper, false)
       .Bind("strategy", strategyField, ArchToolsetStrategyHelper, false);
   return [valueField, strategyField,
-          objectHelper](ConfigurePreset& out, const Json::Value* value,
+          objectHelper](ConfigurePreset& out, Json::Value const* value,
                         cmJSONState* state) -> bool {
     if (!value) {
       (out.*valueField).clear();
@@ -84,7 +85,7 @@ ArchToolsetHelper(
       return objectHelper(out, value, state);
     }
 
-    cmCMakePresetErrors::INVALID_PRESET(value, state);
+    cmCMakePresetsErrors::INVALID_PRESET(value, state);
     return false;
   };
 }
@@ -95,7 +96,7 @@ auto const ToolsetHelper = ArchToolsetHelper(
   &ConfigurePreset::Toolset, &ConfigurePreset::ToolsetStrategy);
 
 bool TraceEnableModeHelper(cm::optional<TraceEnableMode>& out,
-                           const Json::Value* value, cmJSONState* state)
+                           Json::Value const* value, cmJSONState* state)
 {
   if (!value) {
     out = cm::nullopt;
@@ -103,7 +104,7 @@ bool TraceEnableModeHelper(cm::optional<TraceEnableMode>& out,
   }
 
   if (!value->isString()) {
-    cmCMakePresetErrors::INVALID_PRESET(value, state);
+    cmCMakePresetsErrors::INVALID_PRESET(value, state);
     return false;
   }
 
@@ -114,7 +115,7 @@ bool TraceEnableModeHelper(cm::optional<TraceEnableMode>& out,
   } else if (value->asString() == "expand") {
     out = TraceEnableMode::Expand;
   } else {
-    cmCMakePresetErrors::INVALID_PRESET(value, state);
+    cmCMakePresetsErrors::INVALID_PRESET(value, state);
     return false;
   }
 
@@ -122,7 +123,7 @@ bool TraceEnableModeHelper(cm::optional<TraceEnableMode>& out,
 }
 
 bool TraceOutputFormatHelper(cm::optional<TraceOutputFormat>& out,
-                             const Json::Value* value, cmJSONState* state)
+                             Json::Value const* value, cmJSONState* state)
 {
   if (!value) {
     out = cm::nullopt;
@@ -130,7 +131,7 @@ bool TraceOutputFormatHelper(cm::optional<TraceOutputFormat>& out,
   }
 
   if (!value->isString()) {
-    cmCMakePresetErrors::INVALID_PRESET(value, state);
+    cmCMakePresetsErrors::INVALID_PRESET(value, state);
     return false;
   }
 
@@ -139,7 +140,7 @@ bool TraceOutputFormatHelper(cm::optional<TraceOutputFormat>& out,
   } else if (value->asString() == "json-v1") {
     out = TraceOutputFormat::JSONv1;
   } else {
-    cmCMakePresetErrors::INVALID_PRESET(value, state);
+    cmCMakePresetsErrors::INVALID_PRESET(value, state);
     return false;
   }
 
@@ -148,7 +149,7 @@ bool TraceOutputFormatHelper(cm::optional<TraceOutputFormat>& out,
 
 auto const VariableStringHelper = JSONHelperBuilder::String();
 
-bool VariableValueHelper(std::string& out, const Json::Value* value,
+bool VariableValueHelper(std::string& out, Json::Value const* value,
                          cmJSONState* state)
 {
   if (!value) {
@@ -166,11 +167,11 @@ bool VariableValueHelper(std::string& out, const Json::Value* value,
 
 auto const VariableObjectHelper =
   JSONHelperBuilder::Object<CacheVariable>(
-    cmCMakePresetErrors::INVALID_VARIABLE_OBJECT, false)
+    cmCMakePresetsErrors::INVALID_VARIABLE_OBJECT, false)
     .Bind("type"_s, &CacheVariable::Type, VariableStringHelper, false)
     .Bind("value"_s, &CacheVariable::Value, VariableValueHelper);
 
-bool VariableHelper(cm::optional<CacheVariable>& out, const Json::Value* value,
+bool VariableHelper(cm::optional<CacheVariable>& out, Json::Value const* value,
                     cmJSONState* state)
 {
   if (value->isBool()) {
@@ -195,13 +196,13 @@ bool VariableHelper(cm::optional<CacheVariable>& out, const Json::Value* value,
     out = cm::nullopt;
     return true;
   }
-  cmCMakePresetErrors::INVALID_VARIABLE(value, state);
+  cmCMakePresetsErrors::INVALID_VARIABLE(value, state);
   return false;
 }
 
 auto const VariablesHelper =
   JSONHelperBuilder::Map<cm::optional<CacheVariable>>(
-    cmCMakePresetErrors::INVALID_PRESET, VariableHelper);
+    cmCMakePresetsErrors::INVALID_PRESET, VariableHelper);
 
 auto const PresetWarningsHelper =
   JSONHelperBuilder::Object<ConfigurePreset>(
@@ -237,7 +238,7 @@ auto const PresetDebugHelper =
 
 auto const PresetTraceHelper =
   JSONHelperBuilder::Object<ConfigurePreset>(
-    cmCMakePresetErrors::INVALID_PRESET_OBJECT, false)
+    cmCMakePresetsErrors::INVALID_PRESET_OBJECT, false)
     .Bind("mode"_s, &ConfigurePreset::TraceMode, TraceEnableModeHelper, false)
     .Bind("format"_s, &ConfigurePreset::TraceFormat, TraceOutputFormatHelper,
           false)
@@ -249,7 +250,7 @@ auto const PresetTraceHelper =
 
 auto const ConfigurePresetHelper =
   JSONHelperBuilder::Object<ConfigurePreset>(
-    cmCMakePresetErrors::INVALID_PRESET_OBJECT, false)
+    cmCMakePresetsErrors::INVALID_PRESET_OBJECT, false)
     .Bind("name"_s, &ConfigurePreset::Name,
           cmCMakePresetsGraphInternal::PresetNameHelper)
     .Bind("inherits"_s, &ConfigurePreset::Inherits,
@@ -259,7 +260,7 @@ auto const ConfigurePresetHelper =
           cmCMakePresetsGraphInternal::PresetBoolHelper, false)
     .Bind<std::nullptr_t>("vendor"_s, nullptr,
                           cmCMakePresetsGraphInternal::VendorHelper(
-                            cmCMakePresetErrors::INVALID_PRESET),
+                            cmCMakePresetsErrors::INVALID_PRESET),
                           false)
     .Bind("displayName"_s, &ConfigurePreset::DisplayName,
           cmCMakePresetsGraphInternal::PresetStringHelper, false)
@@ -270,6 +271,8 @@ auto const ConfigurePresetHelper =
     .Bind("architecture"_s, ArchitectureHelper, false)
     .Bind("toolset"_s, ToolsetHelper, false)
     .Bind("toolchainFile"_s, &ConfigurePreset::ToolchainFile,
+          cmCMakePresetsGraphInternal::PresetStringHelper, false)
+    .Bind("graphviz"_s, &ConfigurePreset::GraphVizFile,
           cmCMakePresetsGraphInternal::PresetStringHelper, false)
     .Bind("binaryDir"_s, &ConfigurePreset::BinaryDir,
           cmCMakePresetsGraphInternal::PresetStringHelper, false)
@@ -291,10 +294,10 @@ auto const ConfigurePresetHelper =
 
 namespace cmCMakePresetsGraphInternal {
 bool ConfigurePresetsHelper(std::vector<ConfigurePreset>& out,
-                            const Json::Value* value, cmJSONState* state)
+                            Json::Value const* value, cmJSONState* state)
 {
   static auto const helper = JSONHelperBuilder::Vector<ConfigurePreset>(
-    cmCMakePresetErrors::INVALID_PRESETS, ConfigurePresetHelper);
+    cmCMakePresetsErrors::INVALID_PRESETS, ConfigurePresetHelper);
 
   return helper(out, value, state);
 }

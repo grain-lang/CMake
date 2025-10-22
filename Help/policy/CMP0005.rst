@@ -1,6 +1,9 @@
 CMP0005
 -------
 
+.. |REMOVED_IN_CMAKE_VERSION| replace:: 4.0
+.. include:: include/REMOVED_PROLOGUE.rst
+
 Preprocessor definition values are now escaped automatically.
 
 This policy determines whether or not CMake should generate escaped
@@ -19,8 +22,6 @@ generate correct escapes for all native build tools automatically.
 See documentation of the ``COMPILE_DEFINITIONS`` target property for
 limitations of the escaping implementation.
 
-This policy was introduced in CMake version 2.6.0.  CMake version
-|release| warns when the policy is not set and uses ``OLD`` behavior.  Use
-the :command:`cmake_policy` command to set it to ``OLD`` or ``NEW`` explicitly.
-
-.. include:: DEPRECATED.txt
+.. |INTRODUCED_IN_CMAKE_VERSION| replace:: 2.6.0
+.. |WARNED_OR_DID_NOT_WARN| replace:: warned
+.. include:: include/REMOVED_EPILOGUE.rst

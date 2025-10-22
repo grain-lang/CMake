@@ -1,5 +1,5 @@
 /* Distributed under the OSI-approved BSD 3-Clause License.  See accompanying
-   file Copyright.txt or https://cmake.org/licensing for details.  */
+   file LICENSE.rst or https://cmake.org/licensing for details.  */
 #include "cmCTestHG.h"
 
 #include <ostream>
@@ -11,12 +11,12 @@
 
 #include "cmCTest.h"
 #include "cmCTestVC.h"
-#include "cmProcessTools.h"
+#include "cmMakefile.h"
 #include "cmSystemTools.h"
 #include "cmXMLParser.h"
 
-cmCTestHG::cmCTestHG(cmCTest* ct, std::ostream& log)
-  : cmCTestGlobalVC(ct, log)
+cmCTestHG::cmCTestHG(cmCTest* ct, cmMakefile* mf, std::ostream& log)
+  : cmCTestGlobalVC(ct, mf, log)
 {
   this->PriorRev = this->Unknown;
 }
@@ -26,7 +26,7 @@ cmCTestHG::~cmCTestHG() = default;
 class cmCTestHG::IdentifyParser : public cmCTestVC::LineParser
 {
 public:
-  IdentifyParser(cmCTestHG* hg, const char* prefix, std::string& rev)
+  IdentifyParser(cmCTestHG* hg, char const* prefix, std::string& rev)
     : Rev(rev)
   {
     this->SetLog(&hg->Log, prefix);
@@ -50,7 +50,7 @@ private:
 class cmCTestHG::StatusParser : public cmCTestVC::LineParser
 {
 public:
-  StatusParser(cmCTestHG* hg, const char* prefix)
+  StatusParser(cmCTestHG* hg, char const* prefix)
     : HG(hg)
   {
     this->SetLog(&hg->Log, prefix);
@@ -96,8 +96,8 @@ private:
 std::string cmCTestHG::GetWorkingRevision()
 {
   // Run plumbing "hg identify" to get work tree revision.
-  const char* hg = this->CommandLineTool.c_str();
-  const char* hg_identify[] = { hg, "identify", "-i", nullptr };
+  std::string hg = this->CommandLineTool;
+  std::vector<std::string> hg_identify = { hg, "identify", "-i" };
   std::string rev;
   IdentifyParser out(this, "rev-out> ", rev);
   OutputLogger err(this->Log, "rev-err> ");
@@ -128,36 +128,31 @@ bool cmCTestHG::UpdateImpl()
 {
   // Use "hg pull" followed by "hg update" to update the working tree.
   {
-    const char* hg = this->CommandLineTool.c_str();
-    const char* hg_pull[] = { hg, "pull", "-v", nullptr };
+    std::string hg = this->CommandLineTool;
+    std::vector<std::string> hg_pull = { hg, "pull", "-v" };
     OutputLogger out(this->Log, "pull-out> ");
     OutputLogger err(this->Log, "pull-err> ");
-    this->RunChild(&hg_pull[0], &out, &err);
+    this->RunChild(hg_pull, &out, &err);
   }
 
   // TODO: if(this->CTest->GetTestModel() == cmCTest::NIGHTLY)
 
-  std::vector<char const*> hg_update;
-  hg_update.push_back(this->CommandLineTool.c_str());
-  hg_update.push_back("update");
-  hg_update.push_back("-v");
+  std::vector<std::string> hg_update;
+  hg_update.emplace_back(this->CommandLineTool);
+  hg_update.emplace_back("update");
+  hg_update.emplace_back("-v");
 
   // Add user-specified update options.
-  std::string opts = this->CTest->GetCTestConfiguration("UpdateOptions");
+  std::string opts = this->Makefile->GetSafeDefinition("CTEST_UPDATE_OPTIONS");
   if (opts.empty()) {
-    opts = this->CTest->GetCTestConfiguration("HGUpdateOptions");
+    opts = this->Makefile->GetSafeDefinition("CTEST_HG_UPDATE_OPTIONS");
   }
   std::vector<std::string> args = cmSystemTools::ParseArguments(opts);
-  for (std::string const& arg : args) {
-    hg_update.push_back(arg.c_str());
-  }
-
-  // Sentinel argument.
-  hg_update.push_back(nullptr);
+  cm::append(hg_update, args);
 
   OutputLogger out(this->Log, "update-out> ");
   OutputLogger err(this->Log, "update-err> ");
-  return this->RunUpdateCommand(hg_update.data(), &out, &err);
+  return this->RunUpdateCommand(hg_update, &out, &err);
 }
 
 class cmCTestHG::LogParser
@@ -165,7 +160,7 @@ class cmCTestHG::LogParser
   , private cmXMLParser
 {
 public:
-  LogParser(cmCTestHG* hg, const char* prefix)
+  LogParser(cmCTestHG* hg, char const* prefix)
     : OutputLogger(hg->Log, prefix)
     , HG(hg)
   {
@@ -183,19 +178,19 @@ private:
   Change CurChange;
   std::vector<char> CData;
 
-  bool ProcessChunk(const char* data, int length) override
+  bool ProcessChunk(char const* data, int length) override
   {
     this->OutputLogger::ProcessChunk(data, length);
     this->ParseChunk(data, length);
     return true;
   }
 
-  void StartElement(const std::string& name, const char** atts) override
+  void StartElement(std::string const& name, char const** atts) override
   {
     this->CData.clear();
     if (name == "logentry") {
       this->Rev = Revision();
-      if (const char* rev =
+      if (char const* rev =
             cmCTestHG::LogParser::FindAttribute(atts, "revision")) {
         this->Rev.Rev = rev;
       }
@@ -203,12 +198,12 @@ private:
     }
   }
 
-  void CharacterDataHandler(const char* data, int length) override
+  void CharacterDataHandler(char const* data, int length) override
   {
     cm::append(this->CData, data, data + length);
   }
 
-  void EndElement(const std::string& name) override
+  void EndElement(std::string const& name) override
   {
     if (name == "logentry") {
       this->HG->DoRevision(this->Rev, this->Changes);
@@ -263,7 +258,7 @@ private:
     return output;
   }
 
-  void ReportError(int /*line*/, int /*column*/, const char* msg) override
+  void ReportError(int /*line*/, int /*column*/, char const* msg) override
   {
     this->HG->Log << "Error parsing hg log xml: " << msg << "\n";
   }
@@ -278,8 +273,8 @@ bool cmCTestHG::LoadRevisions()
   // the project has spaces in the path.  Also, they may not have
   // proper XML escapes.
   std::string range = this->OldRevision + ":" + this->NewRevision;
-  const char* hg = this->CommandLineTool.c_str();
-  const char* hgXMLTemplate = "<logentry\n"
+  std::string hg = this->CommandLineTool;
+  std::string hgXMLTemplate = "<logentry\n"
                               "   revision=\"{node|short}\">\n"
                               "  <author>{author|person}</author>\n"
                               "  <email>{author|email}</email>\n"
@@ -289,10 +284,8 @@ bool cmCTestHG::LoadRevisions()
                               "  <file_adds>{file_adds}</file_adds>\n"
                               "  <file_dels>{file_dels}</file_dels>\n"
                               "</logentry>\n";
-  const char* hg_log[] = {
-    hg,           "log",         "--removed", "-r", range.c_str(),
-    "--template", hgXMLTemplate, nullptr
-  };
+  std::vector<std::string> hg_log = { hg,    "log",        "--removed",  "-r",
+                                      range, "--template", hgXMLTemplate };
 
   LogParser out(this, "log-out> ");
   out.Process("<?xml version=\"1.0\"?>\n"
@@ -306,8 +299,8 @@ bool cmCTestHG::LoadRevisions()
 bool cmCTestHG::LoadModifications()
 {
   // Use 'hg status' to get modified files.
-  const char* hg = this->CommandLineTool.c_str();
-  const char* hg_status[] = { hg, "status", nullptr };
+  std::string hg = this->CommandLineTool;
+  std::vector<std::string> hg_status = { hg, "status" };
   StatusParser out(this, "status-out> ");
   OutputLogger err(this->Log, "status-err> ");
   this->RunChild(hg_status, &out, &err);

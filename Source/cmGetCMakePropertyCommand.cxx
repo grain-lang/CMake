@@ -1,14 +1,14 @@
 /* Distributed under the OSI-approved BSD 3-Clause License.  See accompanying
-   file Copyright.txt or https://cmake.org/licensing for details.  */
+   file LICENSE.rst or https://cmake.org/licensing for details.  */
 #include "cmGetCMakePropertyCommand.h"
 
 #include <set>
 
 #include "cmExecutionStatus.h"
 #include "cmGlobalGenerator.h"
+#include "cmList.h"
 #include "cmMakefile.h"
 #include "cmState.h"
-#include "cmStringAlgorithms.h"
 #include "cmValue.h"
 
 // cmGetCMakePropertyCommand
@@ -33,9 +33,9 @@ bool cmGetCMakePropertyCommand(std::vector<std::string> const& args,
       output = *macrosProp;
     }
   } else if (args[1] == "COMPONENTS") {
-    const std::set<std::string>* components =
+    std::set<std::string> const* components =
       status.GetMakefile().GetGlobalGenerator()->GetInstallComponents();
-    output = cmJoin(*components, ";");
+    output = cmList::to_string(*components);
   } else {
     cmValue prop = nullptr;
     if (!args[1].empty()) {

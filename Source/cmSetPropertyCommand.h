@@ -1,5 +1,5 @@
 /* Distributed under the OSI-approved BSD 3-Clause License.  See accompanying
-   file Copyright.txt or https://cmake.org/licensing for details.  */
+   file LICENSE.rst or https://cmake.org/licensing for details.  */
 #pragma once
 
 #include "cmConfigure.h" // IWYU pragma: keep
@@ -33,8 +33,20 @@ bool HandleAndValidateSourceFileDirectoryScopes(
   std::vector<std::string>& source_target_directories,
   std::vector<cmMakefile*>& source_file_directory_makefiles);
 
+bool HandleTestDirectoryScopes(cmExecutionStatus& status,
+                               std::string& test_directory,
+                               cmMakefile*& directory_makefile);
+
+bool HandleTestDirectoryScopeValidation(cmExecutionStatus& status,
+                                        bool test_directory_option_enabled,
+                                        std::string& test_directory);
+
+bool HandleAndValidateTestDirectoryScopes(
+  cmExecutionStatus& status, bool test_directory_option_encountered,
+  std::string& test_directory, cmMakefile*& test_directory_makefile);
+
 std::string MakeSourceFilePathAbsoluteIfNeeded(
-  cmExecutionStatus& status, const std::string& source_file_path, bool needed);
+  cmExecutionStatus& status, std::string const& source_file_path, bool needed);
 void MakeSourceFilePathsAbsoluteIfNeeded(
   cmExecutionStatus& status,
   std::vector<std::string>& source_files_absolute_paths,

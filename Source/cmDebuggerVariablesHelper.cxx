@@ -1,5 +1,5 @@
 /* Distributed under the OSI-approved BSD 3-Clause License.  See accompanying
-   file Copyright.txt or https://cmake.org/licensing for details.  */
+   file LICENSE.rst or https://cmake.org/licensing for details.  */
 
 #include "cmDebuggerVariablesHelper.h"
 
@@ -7,10 +7,11 @@
 #include <cstddef>
 #include <functional>
 #include <iomanip>
+#include <iterator>
 #include <map>
 #include <sstream>
 
-#include "cm_codecvt.hxx"
+#include "cm_codecvt_Encoding.hxx"
 
 #include "cmDebuggerStackFrame.h"
 #include "cmDebuggerVariables.h"
@@ -22,6 +23,7 @@
 #include "cmPropertyMap.h"
 #include "cmState.h"
 #include "cmStateSnapshot.h"
+#include "cmStringAlgorithms.h"
 #include "cmTarget.h"
 #include "cmTest.h"
 #include "cmValue.h"
@@ -38,8 +40,6 @@ std::shared_ptr<cmDebuggerVariables> cmDebuggerVariablesHelper::Create(
     { cmPolicies::PolicyStatus::OLD, "OLD" },
     { cmPolicies::PolicyStatus::WARN, "WARN" },
     { cmPolicies::PolicyStatus::NEW, "NEW" },
-    { cmPolicies::PolicyStatus::REQUIRED_IF_USED, "REQUIRED_IF_USED" },
-    { cmPolicies::PolicyStatus::REQUIRED_ALWAYS, "REQUIRED_ALWAYS" }
   };
 
   return std::make_shared<cmDebuggerVariables>(
@@ -101,7 +101,7 @@ std::shared_ptr<cmDebuggerVariables> cmDebuggerVariablesHelper::CreateIfAny(
         ret.reserve(items.size());
         int i = 0;
         for (std::string const& item : items) {
-          ret.emplace_back("[" + std::to_string(i++) + "]", item);
+          ret.emplace_back(cmStrCat('[', i++, ']'), item);
         }
         return ret;
       });
@@ -192,7 +192,7 @@ std::shared_ptr<cmDebuggerVariables> cmDebuggerVariablesHelper::CreateIfAny(
   std::shared_ptr<cmDebuggerVariablesManager> const& variablesManager,
   std::string const& name, bool supportsVariableType, cmFileSet* fileSet)
 {
-  if (fileSet == nullptr) {
+  if (!fileSet) {
     return {};
   }
 
@@ -470,7 +470,7 @@ std::shared_ptr<cmDebuggerVariables> cmDebuggerVariablesHelper::CreateIfAny(
   std::shared_ptr<cmDebuggerVariablesManager> const& variablesManager,
   std::string const& name, bool supportsVariableType, cmTest* test)
 {
-  if (test == nullptr) {
+  if (!test) {
     return {};
   }
 
@@ -518,7 +518,7 @@ std::shared_ptr<cmDebuggerVariables> cmDebuggerVariablesHelper::CreateIfAny(
   std::shared_ptr<cmDebuggerVariablesManager> const& variablesManager,
   std::string const& name, bool supportsVariableType, cmMakefile* mf)
 {
-  if (mf == nullptr) {
+  if (!mf) {
     return {};
   }
 
@@ -574,21 +574,21 @@ std::shared_ptr<cmDebuggerVariables> cmDebuggerVariablesHelper::CreateIfAny(
   std::shared_ptr<cmDebuggerVariablesManager> const& variablesManager,
   std::string const& name, bool supportsVariableType, cmGlobalGenerator* gen)
 {
-  if (gen == nullptr) {
+  if (!gen) {
     return {};
   }
 
-  auto makeFileEncodingString = [](codecvt::Encoding encoding) {
+  auto makeFileEncodingString = [](codecvt_Encoding encoding) {
     switch (encoding) {
-      case codecvt::Encoding::None:
+      case codecvt_Encoding::None:
         return "None";
-      case codecvt::Encoding::UTF8:
+      case codecvt_Encoding::UTF8:
         return "UTF8";
-      case codecvt::Encoding::UTF8_WITH_BOM:
+      case codecvt_Encoding::UTF8_WITH_BOM:
         return "UTF8_WITH_BOM";
-      case codecvt::Encoding::ANSI:
+      case codecvt_Encoding::ANSI:
         return "ANSI";
-      case codecvt::Encoding::ConsoleOutput:
+      case codecvt_Encoding::ConsoleOutput:
         return "ConsoleOutput";
       default:
         return "Unknown";
@@ -623,10 +623,9 @@ std::shared_ptr<cmDebuggerVariables> cmDebuggerVariablesHelper::CreateIfAny(
       return ret;
     });
 
-  if (gen->GetInstallComponents() != nullptr) {
-    variables->AddSubVariables(
-      CreateIfAny(variablesManager, "InstallComponents", supportsVariableType,
-                  *gen->GetInstallComponents()));
+  if (auto const* ic = gen->GetInstallComponents()) {
+    variables->AddSubVariables(CreateIfAny(
+      variablesManager, "InstallComponents", supportsVariableType, *ic));
   }
 
   variables->SetIgnoreEmptyStringEntries(true);

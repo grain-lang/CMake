@@ -1,5 +1,5 @@
 /* Distributed under the OSI-approved BSD 3-Clause License.  See accompanying
-   file Copyright.txt or https://cmake.org/licensing for details.  */
+   file LICENSE.rst or https://cmake.org/licensing for details.  */
 #include "cmUuid.h"
 
 #include <array>
@@ -7,7 +7,7 @@
 
 #include "cmCryptoHash.h"
 
-static const std::array<int, 5> kUuidGroups = { { 4, 2, 2, 2, 6 } };
+static std::array<int, 5> const kUuidGroups = { { 4, 2, 2, 2, 6 } };
 
 std::string cmUuid::FromMd5(std::vector<unsigned char> const& uuidNamespace,
                             std::string const& name) const
@@ -50,7 +50,7 @@ void cmUuid::CreateHashInput(std::vector<unsigned char> const& uuidNamespace,
   }
 }
 
-std::string cmUuid::FromDigest(const unsigned char* digest,
+std::string cmUuid::FromDigest(unsigned char const* digest,
                                unsigned char version) const
 {
   using byte_t = unsigned char;
@@ -92,7 +92,7 @@ bool cmUuid::StringToBinary(std::string const& input,
   return true;
 }
 
-std::string cmUuid::BinaryToString(const unsigned char* input) const
+std::string cmUuid::BinaryToString(unsigned char const* input) const
 {
   std::string output;
 
@@ -104,20 +104,20 @@ std::string cmUuid::BinaryToString(const unsigned char* input) const
 
     size_t bytes = kUuidGroups[i];
     for (size_t j = 0; j < bytes; ++j) {
-      unsigned char byte = input[inputIndex++];
-      output += this->ByteToHex(byte);
+      unsigned char inputByte = input[inputIndex++];
+      output += this->ByteToHex(inputByte);
     }
   }
 
   return output;
 }
 
-std::string cmUuid::ByteToHex(unsigned char byte) const
+std::string cmUuid::ByteToHex(unsigned char inputByte) const
 {
   std::string result("  ");
   for (int i = 0; i < 2; ++i) {
-    unsigned char rest = byte % 16;
-    byte /= 16;
+    unsigned char rest = inputByte % 16;
+    inputByte /= 16;
     char c = (rest < 0xA) ? static_cast<char>('0' + rest)
                           : static_cast<char>('a' + (rest - 0xA));
     result.at(1 - i) = c;

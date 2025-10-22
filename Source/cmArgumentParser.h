@@ -1,5 +1,5 @@
 /* Distributed under the OSI-approved BSD 3-Clause License.  See accompanying
-   file Copyright.txt or https://cmake.org/licensing for details.  */
+   file LICENSE.rst or https://cmake.org/licensing for details.  */
 #pragma once
 
 #include "cmConfigure.h" // IWYU pragma: keep
@@ -7,6 +7,7 @@
 #include <cassert>
 #include <cstddef>
 #include <functional>
+#include <iterator>
 #include <map>
 #include <string>
 #include <utility>
@@ -16,6 +17,7 @@
 #include <cm/string_view>
 #include <cm/type_traits>
 #include <cmext/string_view>
+#include <cmext/type_traits>
 
 #include "cmArgumentParserTypes.h" // IWYU pragma: keep
 
@@ -111,6 +113,7 @@ public:
   KeywordNameAction KeywordMissingValue;
   KeywordNameAction ParsedKeyword;
   PositionActionMap Positions;
+  KeywordAction TrailingArgs;
 };
 
 class Base
@@ -147,6 +150,12 @@ public:
     this->Bindings.KeywordMissingValue = std::move(action);
   }
 
+  void BindTrailingArgs(KeywordAction action)
+  {
+    assert(!this->Bindings.TrailingArgs);
+    this->Bindings.TrailingArgs = std::move(action);
+  }
+
   void Bind(std::size_t pos, PositionAction action)
   {
     bool const inserted =
@@ -176,6 +185,17 @@ public:
   void Bind(MaybeEmpty<std::vector<std::string>>& val);
   void Bind(NonEmpty<std::vector<std::string>>& val);
   void Bind(std::vector<std::vector<std::string>>& val);
+  template <typename U>
+  void Bind(NonEmpty<std::vector<std::pair<std::string, U>>>& val,
+            U const& context)
+  {
+    this->Bind(
+      [&val, &context](cm::string_view arg) -> Continue {
+        val.emplace_back(std::string(arg), context);
+        return Continue::Yes;
+      },
+      ExpectAtLeast{ 1 });
+  }
 
   // cm::optional<> records the presence the keyword to which it binds.
   template <typename T>
@@ -185,6 +205,15 @@ public:
       optVal.emplace();
     }
     this->Bind(*optVal);
+  }
+
+  template <typename T, typename U>
+  void Bind(cm::optional<T>& optVal, U const& context)
+  {
+    if (!optVal) {
+      optVal.emplace();
+    }
+    this->Bind(*optVal, context);
   }
 
   template <typename Range>
@@ -223,11 +252,25 @@ class cmArgumentParser : private ArgumentParser::Base
 public:
   // I *think* this function could be made `constexpr` when the code is
   // compiled as C++20.  This would allow building a parser at compile time.
-  template <typename T>
-  cmArgumentParser& Bind(cm::static_string_view name, T Result::*member)
+  template <typename T, typename cT = cm::member_pointer_class_t<T>,
+            typename mT = cm::remove_member_pointer_t<T>,
+            typename = cm::enable_if_t<std::is_base_of<cT, Result>::value>,
+            typename = cm::enable_if_t<!std::is_function<mT>::value>>
+  cmArgumentParser& Bind(cm::static_string_view name, T member)
   {
     this->Base::Bind(name, [member](Instance& instance) {
       instance.Bind(static_cast<Result*>(instance.Result)->*member);
+    });
+    return *this;
+  }
+
+  template <typename T, typename U>
+  cmArgumentParser& BindWithContext(cm::static_string_view name,
+                                    T Result::*member, U Result::*context)
+  {
+    this->Base::Bind(name, [member, context](Instance& instance) {
+      auto* result = static_cast<Result*>(instance.Result);
+      instance.Bind(result->*member, result->*context);
     });
     return *this;
   }
@@ -318,6 +361,18 @@ public:
     return *this;
   }
 
+  template <typename T, typename cT = cm::member_pointer_class_t<T>,
+            typename mT = cm::remove_member_pointer_t<T>,
+            typename = cm::enable_if_t<std::is_base_of<cT, Result>::value>,
+            typename = cm::enable_if_t<!std::is_function<mT>::value>>
+  cmArgumentParser& BindTrailingArgs(T member)
+  {
+    this->Base::BindTrailingArgs([member](Instance& instance) {
+      instance.Bind(static_cast<Result*>(instance.Result)->*member);
+    });
+    return *this;
+  }
+
   template <typename Range>
   bool Parse(Result& result, Range const& args,
              std::vector<std::string>* unparsedArguments,
@@ -338,6 +393,11 @@ public:
     Result result;
     this->Parse(result, args, unparsedArguments, pos);
     return result;
+  }
+
+  bool HasKeyword(cm::string_view key) const
+  {
+    return this->Bindings.Keywords.Find(key) != this->Bindings.Keywords.end();
   }
 };
 
@@ -395,6 +455,14 @@ public:
     return *this;
   }
 
+  template <typename T>
+  cmArgumentParser& BindTrailingArgs(T& ref)
+  {
+    this->Base::BindTrailingArgs(
+      [&ref](Instance& instance) { instance.Bind(ref); });
+    return *this;
+  }
+
   template <typename Range>
   ParseResult Parse(Range const& args,
                     std::vector<std::string>* unparsedArguments,
@@ -404,6 +472,11 @@ public:
     Instance instance(this->Bindings, &parseResult, unparsedArguments);
     instance.Parse(args, pos);
     return parseResult;
+  }
+
+  bool HasKeyword(cm::string_view key) const
+  {
+    return this->Bindings.Keywords.Find(key) != this->Bindings.Keywords.end();
   }
 
 protected:

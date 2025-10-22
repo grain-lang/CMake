@@ -1,11 +1,10 @@
 /* Distributed under the OSI-approved BSD 3-Clause License.  See accompanying
-   file Copyright.txt or https://cmake.org/licensing for details.  */
+   file LICENSE.rst or https://cmake.org/licensing for details.  */
 #include "cmFileAPICodemodel.h"
 
 #include <algorithm>
 #include <cassert>
 #include <cstddef>
-#include <functional>
 #include <limits>
 #include <map>
 #include <memory>
@@ -25,6 +24,7 @@
 #include "cmExportSet.h"
 #include "cmFileAPI.h"
 #include "cmFileSet.h"
+#include "cmGenExContext.h"
 #include "cmGeneratorExpression.h"
 #include "cmGeneratorTarget.h"
 #include "cmGlobalGenerator.h"
@@ -42,10 +42,12 @@
 #include "cmInstallSubdirectoryGenerator.h"
 #include "cmInstallTargetGenerator.h"
 #include "cmLinkLineComputer.h" // IWYU pragma: keep
+#include "cmList.h"
 #include "cmListFileCache.h"
 #include "cmLocalGenerator.h"
 #include "cmMakefile.h"
 #include "cmMessageType.h"
+#include "cmRange.h"
 #include "cmSourceFile.h"
 #include "cmSourceGroup.h"
 #include "cmState.h"
@@ -256,7 +258,7 @@ class CodemodelConfig
   struct Project
   {
     cmStateSnapshot Snapshot;
-    static const Json::ArrayIndex NoParentIndex =
+    static Json::ArrayIndex const NoParentIndex =
       static_cast<Json::ArrayIndex>(-1);
     Json::ArrayIndex ParentIndex = NoParentIndex;
     Json::Value ChildIndexes = Json::arrayValue;
@@ -504,6 +506,10 @@ class Target
   Json::Value DumpDependencies();
   Json::Value DumpDependency(cmTargetDepend const& td);
   Json::Value DumpFolder();
+  Json::Value DumpLauncher(char const* name, char const* type);
+  Json::Value DumpLaunchers();
+
+  Json::Value DumpDebugger();
 
 public:
   Target(cmGeneratorTarget* gt, std::string const& config);
@@ -539,7 +545,7 @@ Json::Value Codemodel::DumpConfigurations()
   Json::Value configurations = Json::arrayValue;
   cmGlobalGenerator* gg =
     this->FileAPI.GetCMakeInstance()->GetGlobalGenerator();
-  const auto& makefiles = gg->GetMakefiles();
+  auto const& makefiles = gg->GetMakefiles();
   if (!makefiles.empty()) {
     std::vector<std::string> const& configs =
       makefiles[0]->GetGeneratorConfigs(cmMakefile::IncludeEmptyConfig);
@@ -586,7 +592,7 @@ void CodemodelConfig::ProcessDirectories()
 
   // Add directories in forward order to process parents before children.
   this->Directories.reserve(localGens.size());
-  for (const auto& lg : localGens) {
+  for (auto const& lg : localGens) {
     auto directoryIndex =
       static_cast<Json::ArrayIndex>(this->Directories.size());
     this->Directories.emplace_back();
@@ -605,7 +611,7 @@ void CodemodelConfig::ProcessDirectories()
     Directory& d = *di;
 
     // Accumulate the presence of install rules on the way up.
-    for (const auto& gen :
+    for (auto const& gen :
          d.LocalGenerator->GetMakefile()->GetInstallGenerators()) {
       if (!dynamic_cast<cmInstallSubdirectoryGenerator*>(gen.get())) {
         d.HasInstallRule = true;
@@ -668,7 +674,7 @@ Json::Value CodemodelConfig::DumpTargets()
   std::vector<cmGeneratorTarget*> targetList;
   cmGlobalGenerator* gg =
     this->FileAPI.GetCMakeInstance()->GetGlobalGenerator();
-  for (const auto& lg : gg->GetLocalGenerators()) {
+  for (auto const& lg : gg->GetLocalGenerators()) {
     cm::append(targetList, lg->GetGeneratorTargets());
   }
   std::sort(targetList.begin(), targetList.end(),
@@ -679,6 +685,11 @@ Json::Value CodemodelConfig::DumpTargets()
   for (cmGeneratorTarget* gt : targetList) {
     if (gt->GetType() == cmStateEnums::GLOBAL_TARGET ||
         !gt->IsInBuildSystem()) {
+      continue;
+    }
+
+    // Ignore targets starting with `__cmake_` as they are internal.
+    if (cmHasLiteralPrefix(gt->GetName(), "__cmake_")) {
       continue;
     }
 
@@ -693,12 +704,6 @@ Json::Value CodemodelConfig::DumpTarget(cmGeneratorTarget* gt,
 {
   Target t(gt, this->Config);
   std::string prefix = "target-" + gt->GetName();
-  for (char& c : prefix) {
-    // CMP0037 OLD behavior allows slashes in target names.  Remove them.
-    if (c == '/' || c == '\\') {
-      c = '_';
-    }
-  }
   if (!this->Config.empty()) {
     prefix += "-" + this->Config;
   }
@@ -885,7 +890,7 @@ Json::Value DirectoryObject::DumpPaths()
 Json::Value DirectoryObject::DumpInstallers()
 {
   Json::Value installers = Json::arrayValue;
-  for (const auto& gen : this->LG->GetMakefile()->GetInstallGenerators()) {
+  for (auto const& gen : this->LG->GetMakefile()->GetInstallGenerators()) {
     Json::Value installer = this->DumpInstaller(gen.get());
     if (!installer.empty()) {
       installers.append(std::move(installer)); // NOLINT(*)
@@ -1064,22 +1069,27 @@ Json::Value DirectoryObject::DumpInstaller(cmInstallGenerator* gen)
     }
   } else if (auto* installFileSet =
                dynamic_cast<cmInstallFileSetGenerator*>(gen)) {
+    auto const* fileSet = installFileSet->GetFileSet();
+
+    // No fileSet by that name exists for the associated target
+    if (!fileSet) {
+      return installer;
+    }
+
     installer["type"] = "fileSet";
     installer["destination"] = installFileSet->GetDestination(this->Config);
 
-    auto* fileSet = installFileSet->GetFileSet();
     auto* target = installFileSet->GetTarget();
 
+    cm::GenEx::Context context(target->LocalGenerator, this->Config);
+
     auto dirCges = fileSet->CompileDirectoryEntries();
-    auto dirs = fileSet->EvaluateDirectoryEntries(
-      dirCges, target->GetLocalGenerator(), this->Config, target);
+    auto dirs = fileSet->EvaluateDirectoryEntries(dirCges, context, target);
 
     auto entryCges = fileSet->CompileFileEntries();
     std::map<std::string, std::vector<std::string>> entries;
     for (auto const& entryCge : entryCges) {
-      fileSet->EvaluateFileEntry(dirs, entries, entryCge,
-                                 target->GetLocalGenerator(), this->Config,
-                                 target);
+      fileSet->EvaluateFileEntry(dirs, entries, entryCge, context, target);
     }
 
     Json::Value files = Json::arrayValue;
@@ -1224,6 +1234,13 @@ Json::Value Target::Dump()
     target["archive"] = this->DumpArchive();
   }
 
+  if (type == cmStateEnums::EXECUTABLE) {
+    Json::Value launchers = this->DumpLaunchers();
+    if (!launchers.empty()) {
+      target["launchers"] = std::move(launchers);
+    }
+  }
+
   Json::Value dependencies = this->DumpDependencies();
   if (!dependencies.empty()) {
     target["dependencies"] = dependencies;
@@ -1257,6 +1274,11 @@ Json::Value Target::Dump()
   }
 
   target["backtraceGraph"] = this->Backtraces.Dump();
+
+  Json::Value debugger = this->DumpDebugger();
+  if (!debugger.isNull()) {
+    target["debugger"] = std::move(debugger);
+  }
 
   return target;
 }
@@ -1351,12 +1373,12 @@ CompileData Target::BuildCompileData(cmSourceFile* sf)
   cmGeneratorExpressionInterpreter genexInterpreter(lg, this->Config, this->GT,
                                                     fd.Language);
 
-  const std::string COMPILE_FLAGS("COMPILE_FLAGS");
+  std::string const COMPILE_FLAGS("COMPILE_FLAGS");
   if (cmValue cflags = sf->GetProperty(COMPILE_FLAGS)) {
     std::string flags = genexInterpreter.Evaluate(*cflags, COMPILE_FLAGS);
     fd.Flags.emplace_back(std::move(flags), JBTIndex());
   }
-  const std::string COMPILE_OPTIONS("COMPILE_OPTIONS");
+  std::string const COMPILE_OPTIONS("COMPILE_OPTIONS");
   for (BT<std::string> tmpOpt : sf->GetCompileOptions()) {
     tmpOpt.Value = genexInterpreter.Evaluate(tmpOpt.Value, COMPILE_OPTIONS);
     // After generator evaluation we need to use the AppendCompileOptions
@@ -1369,15 +1391,12 @@ CompileData Target::BuildCompileData(cmSourceFile* sf)
   }
 
   // Add precompile headers compile options.
-  std::vector<std::string> architectures =
-    this->GT->GetAppleArchs(this->Config, fd.Language);
-  if (architectures.empty()) {
-    architectures.emplace_back();
-  }
+  std::vector<std::string> pchArchs =
+    this->GT->GetPchArchs(this->Config, fd.Language);
 
   std::unordered_map<std::string, std::string> pchSources;
-  for (const std::string& arch : architectures) {
-    const std::string pchSource =
+  for (std::string const& arch : pchArchs) {
+    std::string const pchSource =
       this->GT->GetPchSource(this->Config, fd.Language, arch);
     if (!pchSource.empty()) {
       pchSources.insert(std::make_pair(pchSource, arch));
@@ -1409,7 +1428,7 @@ CompileData Target::BuildCompileData(cmSourceFile* sf)
 
   // Add include directories from source file properties.
   {
-    const std::string INCLUDE_DIRECTORIES("INCLUDE_DIRECTORIES");
+    std::string const INCLUDE_DIRECTORIES("INCLUDE_DIRECTORIES");
     for (BT<std::string> tmpInclude : sf->GetIncludeDirectories()) {
       tmpInclude.Value =
         genexInterpreter.Evaluate(tmpInclude.Value, INCLUDE_DIRECTORIES);
@@ -1431,7 +1450,7 @@ CompileData Target::BuildCompileData(cmSourceFile* sf)
     }
   }
 
-  const std::string COMPILE_DEFINITIONS("COMPILE_DEFINITIONS");
+  std::string const COMPILE_DEFINITIONS("COMPILE_DEFINITIONS");
   std::set<BT<std::string>> fileDefines;
   for (BT<std::string> tmpDef : sf->GetCompileDefinitions()) {
     tmpDef.Value =
@@ -1441,14 +1460,14 @@ CompileData Target::BuildCompileData(cmSourceFile* sf)
     // so we handle situations where backtrace entries have lists.
     std::set<std::string> tmp;
     lg->AppendDefines(tmp, tmpDef.Value);
-    for (const std::string& i : tmp) {
+    for (std::string const& i : tmp) {
       BT<std::string> def(i, tmpDef.Backtrace);
       fileDefines.insert(def);
     }
   }
 
   std::set<std::string> configFileDefines;
-  const std::string defPropName =
+  std::string const defPropName =
     "COMPILE_DEFINITIONS_" + cmSystemTools::UpperCase(this->Config);
   if (cmValue config_defs = sf->GetProperty(defPropName)) {
     lg->AppendDefines(
@@ -1589,18 +1608,19 @@ std::pair<Json::Value, Target::FileSetDatabase> Target::DumpFileSets()
         continue;
       }
 
+      cm::GenEx::Context context(this->GT->LocalGenerator, this->Config);
+
       auto fileEntries = fs->CompileFileEntries();
       auto directoryEntries = fs->CompileDirectoryEntries();
 
-      auto directories = fs->EvaluateDirectoryEntries(
-        directoryEntries, this->GT->LocalGenerator, this->Config, this->GT);
+      auto directories =
+        fs->EvaluateDirectoryEntries(directoryEntries, context, this->GT);
 
       fsJson.append(this->DumpFileSet(fs, directories));
 
       std::map<std::string, std::vector<std::string>> files_per_dirs;
       for (auto const& entry : fileEntries) {
-        fs->EvaluateFileEntry(directories, files_per_dirs, entry,
-                              this->GT->LocalGenerator, this->Config,
+        fs->EvaluateFileEntry(directories, files_per_dirs, entry, context,
                               this->GT);
       }
 
@@ -1636,7 +1656,7 @@ Json::Value Target::DumpFileSet(cmFileSet const* fs,
 
   Json::Value baseDirs = Json::arrayValue;
   for (auto const& directory : directories) {
-    baseDirs.append(directory);
+    baseDirs.append(RelativeIfUnder(this->TopSource, directory));
   }
   fileSet["baseDirectories"] = baseDirs;
 
@@ -1679,6 +1699,7 @@ Json::Value Target::DumpSource(cmGeneratorTarget::SourceAndKind const& sk,
   }
 
   switch (sk.Kind) {
+    case cmGeneratorTarget::SourceKindCxxModuleSource:
     case cmGeneratorTarget::SourceKindObjectSource: {
       source["compileGroupIndex"] =
         this->AddSourceCompileGroup(sk.Source.Value, si);
@@ -1887,7 +1908,7 @@ Json::Value Target::DumpArtifacts()
     this->GT->GetObjectSources(objectSources, this->Config);
     std::string const obj_dir = this->GT->GetObjectDirectory(this->Config);
     for (cmSourceFile const* sf : objectSources) {
-      const std::string& obj = this->GT->GetObjectName(sf);
+      std::string const& obj = this->GT->GetObjectName(sf);
       Json::Value artifact = Json::objectValue;
       artifact["path"] = RelativeIfUnder(this->TopBuild, obj_dir + obj);
       artifacts.append(std::move(artifact)); // NOLINT(*)
@@ -2075,6 +2096,63 @@ Json::Value Target::DumpFolder()
   }
   return folder;
 }
+
+Json::Value Target::DumpLauncher(char const* name, char const* type)
+{
+  cmValue property = this->GT->GetProperty(name);
+  Json::Value launcher;
+  if (property) {
+    cmLocalGenerator* lg = this->GT->GetLocalGenerator();
+    cmGeneratorExpression ge(*lg->GetCMakeInstance());
+    cmList commandWithArgs{ ge.Parse(*property)->Evaluate(lg, this->Config) };
+    if (!commandWithArgs.empty() && !commandWithArgs[0].empty()) {
+      std::string command(commandWithArgs[0]);
+      cmSystemTools::ConvertToUnixSlashes(command);
+      launcher = Json::objectValue;
+      launcher["command"] = RelativeIfUnder(this->TopSource, command);
+      launcher["type"] = type;
+      Json::Value args;
+      for (std::string const& arg : cmMakeRange(commandWithArgs).advance(1)) {
+        args.append(arg);
+      }
+      if (!args.empty()) {
+        launcher["arguments"] = std::move(args);
+      }
+    }
+  }
+  return launcher;
+}
+
+Json::Value Target::DumpLaunchers()
+{
+  Json::Value launchers;
+  {
+    Json::Value launcher = DumpLauncher("TEST_LAUNCHER", "test");
+    if (!launcher.empty()) {
+      launchers.append(std::move(launcher));
+    }
+  }
+  if (this->GT->Makefile->IsOn("CMAKE_CROSSCOMPILING")) {
+    Json::Value emulator = DumpLauncher("CROSSCOMPILING_EMULATOR", "emulator");
+    if (!emulator.empty()) {
+      launchers.append(std::move(emulator));
+    }
+  }
+  return launchers;
+}
+}
+
+Json::Value Target::DumpDebugger()
+{
+  Json::Value debuggerInformation;
+  if (cmValue debuggerWorkingDirectory =
+        this->GT->GetGlobalGenerator()->GetDebuggerWorkingDirectory(
+          this->GT)) {
+    debuggerInformation = Json::objectValue;
+    debuggerInformation["workingDirectory"] = *debuggerWorkingDirectory;
+  }
+
+  return debuggerInformation;
 }
 
 Json::Value cmFileAPICodemodelDump(cmFileAPI& fileAPI, unsigned long version)

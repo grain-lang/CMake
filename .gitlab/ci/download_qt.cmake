@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.12)
+cmake_minimum_required(VERSION 3.29)
 
 # Input variables.
 set(qt_version_major "5")
@@ -15,11 +15,11 @@ if ("$ENV{CMAKE_CONFIGURATION}" MATCHES "windows.*package")
   set(qt_url_root "https://cmake.org/files/dependencies")
   set(qt_url_path "")
   if ("$ENV{CMAKE_CONFIGURATION}" MATCHES "windows_x86_64_package")
-    list(APPEND qt_files "qt-5.12.1-win-x86_64-msvc_v142-1.zip")
-    set(qt_subdir "qt-5.12.1-win-x86_64-msvc_v142-1")
+    list(APPEND qt_files "qt-5.15.10-win-x86_64-msvc_v142-1.zip")
+    set(qt_subdir "qt-5.15.10-win-x86_64-msvc_v142-1")
   elseif ("$ENV{CMAKE_CONFIGURATION}" MATCHES "windows_i386_package")
-    list(APPEND qt_files "qt-5.12.1-win-i386-msvc_v142-1.zip")
-    set(qt_subdir "qt-5.12.1-win-i386-msvc_v142-1")
+    list(APPEND qt_files "qt-5.15.10-win-i386-msvc_v142-1.zip")
+    set(qt_subdir "qt-5.15.10-win-i386-msvc_v142-1")
   elseif ("$ENV{CMAKE_CONFIGURATION}" MATCHES "windows_arm64_package")
     list(APPEND qt_files "qt-6.3.0-win-arm64-msvc_v143-1.zip")
     set(qt_subdir "qt-6.3.0-win-arm64-msvc_v143-1")
@@ -122,6 +122,7 @@ foreach (qt_file IN LISTS qt_files)
     message(FATAL_ERROR
       "Failed to extract ${qt_file}: ${err}")
   endif ()
+  file(REMOVE "${qt_file}")
 endforeach ()
 
 # The Windows tarballs have some unfortunate permissions in them that prevent

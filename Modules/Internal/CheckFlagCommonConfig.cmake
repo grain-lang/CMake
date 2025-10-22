@@ -1,5 +1,5 @@
 # Distributed under the OSI-approved BSD 3-Clause License.  See accompanying
-# file Copyright.txt or https://cmake.org/licensing for details.
+# file LICENSE.rst or https://cmake.org/licensing for details.
 
 
 # Do NOT include this module directly into any of your code. It is meant as
@@ -7,10 +7,6 @@
 # It's content may change in any way between releases.
 
 include_guard(GLOBAL)
-
-block(SCOPE_FOR POLICIES)
-cmake_policy(SET CMP0054 NEW) # if() quoted variables not dereferenced
-cmake_policy(SET CMP0057 NEW) # if() supports IN_LIST
 
 macro(CMAKE_CHECK_FLAG_COMMON_INIT _FUNC _LANG _SRC _PATTERNS)
   if("${_LANG}" STREQUAL "C")
@@ -27,7 +23,8 @@ macro(CMAKE_CHECK_FLAG_COMMON_INIT _FUNC _LANG _SRC _PATTERNS)
       FAIL_REGEX "argument unused during compilation: .*") # Clang
   elseif("${_LANG}" STREQUAL "Fortran")
     set(${_SRC} "       program test\n       stop\n       end program")
-    set(${_PATTERNS} FAIL_REGEX "command[ -]line option .* is valid for .* but not for Fortran")
+    set(${_PATTERNS} FAIL_REGEX "command[ -]line option .* is valid for .* but not for Fortran"
+      FAIL_REGEX "argument unused during compilation: .*") # LLVMFlang
   elseif("${_LANG}" STREQUAL "HIP")
     set(${_SRC} "__host__ int main() { return 0; }")
     set(${_PATTERNS} FAIL_REGEX "argument unused during compilation: .*") # Clang
@@ -74,5 +71,3 @@ macro(CMAKE_CHECK_FLAG_COMMON_FINISH)
     set(ENV{${v}} ${_CMAKE_CHECK_FLAG_COMMON_CONFIG_locale_vars_saved_${v}})
   endforeach()
 endmacro()
-
-endblock()

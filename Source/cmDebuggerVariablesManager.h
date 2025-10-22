@@ -1,5 +1,5 @@
 /* Distributed under the OSI-approved BSD 3-Clause License.  See accompanying
-   file Copyright.txt or https://cmake.org/licensing for details.  */
+   file LICENSE.rst or https://cmake.org/licensing for details.  */
 #pragma once
 
 #include "cmConfigure.h" // IWYU pragma: keep
@@ -7,14 +7,9 @@
 #include <cstdint>
 #include <functional>
 #include <unordered_map>
-#include <vector>
 
-#include <cm3p/cppdap/types.h> // IWYU pragma: keep
-
-namespace dap {
-struct Variable;
-struct VariablesRequest;
-}
+#include <cm3p/cppdap/protocol.h>
+#include <cm3p/cppdap/types.h>
 
 namespace cmDebugger {
 

@@ -16,7 +16,7 @@
             "backtrace": [
                 {
                     "file": "^codemodel-v2\\.cmake$",
-                    "line": 13,
+                    "line": 16,
                     "command": "add_library",
                     "hasParent": true
                 },
@@ -64,7 +64,7 @@
     "backtrace": [
         {
             "file": "^codemodel-v2\\.cmake$",
-            "line": 13,
+            "line": 16,
             "command": "add_library",
             "hasParent": true
         },
@@ -88,10 +88,10 @@
         }
     ],
     "folder": null,
-    "nameOnDisk": "^(lib)?c_static_lib\\.(a|lib)$",
+    "nameOnDisk": "^(lib)?c_static_lib\\.(a|lib|l)$",
     "artifacts": [
         {
-            "path": "^((Debug|Release|RelWithDebInfo|MinSizeRel)/)?(lib)?c_static_lib\\.(a|lib)$",
+            "path": "^((Debug|Release|RelWithDebInfo|MinSizeRel)/)?(lib)?c_static_lib\\.(a|lib|l)$",
             "_dllExtra": false
         }
     ],

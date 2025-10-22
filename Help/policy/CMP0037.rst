@@ -1,6 +1,9 @@
 CMP0037
 -------
 
+.. |REMOVED_IN_CMAKE_VERSION| replace:: 4.0
+.. include:: include/REMOVED_PROLOGUE.rst
+
 Target names should not be reserved and should match a validity pattern.
 
 CMake 2.8.12 and lower allowed creating targets using :command:`add_library`,
@@ -27,8 +30,6 @@ reserved names or which do not match the validity pattern.
 The ``NEW`` behavior for this policy is to report an error
 if an add_* command is used with an invalid target name.
 
-This policy was introduced in CMake version 3.0.  CMake version
-|release| warns when the policy is not set and uses ``OLD`` behavior.  Use
-the :command:`cmake_policy` command to set it to ``OLD`` or ``NEW`` explicitly.
-
-.. include:: DEPRECATED.txt
+.. |INTRODUCED_IN_CMAKE_VERSION| replace:: 3.0
+.. |WARNED_OR_DID_NOT_WARN| replace:: warned
+.. include:: include/REMOVED_EPILOGUE.rst

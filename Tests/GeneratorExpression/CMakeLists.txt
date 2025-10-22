@@ -1,4 +1,4 @@
-cmake_minimum_required (VERSION 2.8.8)
+cmake_minimum_required(VERSION 3.10)
 project(GeneratorExpression)
 
 include(CTest)
@@ -70,6 +70,7 @@ add_custom_target(check-part1 ALL
     -Dtest_strequal_comma=$<STREQUAL:$<COMMA>,$<COMMA>>
     -Dtest_strequal_semicolon=$<STREQUAL:$<SEMICOLON>,$<SEMICOLON>>
     -Dtest_strequal_angle_r_comma=$<STREQUAL:$<ANGLE-R>,$<COMMA>>
+    -Dtest_strequal_quote=$<STREQUAL:$<QUOTE>,$<QUOTE>>
     -Dtest_strequal_both_empty=$<STREQUAL:,>
     -Dtest_strequal_one_empty=$<STREQUAL:something,>
     -Dtest_inlist_true=$<IN_LIST:a,a$<SEMICOLON>b>
@@ -111,6 +112,15 @@ target_link_libraries(empty3 LINK_PUBLIC empty2 empty4)
 add_library(empty5 empty.cpp)
 target_include_directories(empty5 PRIVATE /empty5/private1 /empty5/private2)
 
+add_library(interface1 INTERFACE)
+target_sources(interface1 INTERFACE foo.c bar.cpp)
+
+set(interface1Sources $<TARGET_PROPERTY:interface1,INTERFACE_SOURCES>)
+set(interface1MergeSources $<LIST:APPEND,$<LIST:FILTER,${interface1Sources},INCLUDE,.*\\.c$>,$<LIST:FILTER,${interface1Sources},EXCLUDE,.*\\.c$>>)
+
+add_library(interface2 INTERFACE)
+target_sources(interface2 INTERFACE ${interface1MergeSources})
+
 add_custom_target(check-part2 ALL
   COMMAND ${msys2_no_conv} ${CMAKE_COMMAND}
     -Dtest_incomplete_1=$<
@@ -146,6 +156,8 @@ add_custom_target(check-part2 ALL
     -Dtest_target_includes6=$<TARGET_PROPERTY:empty3,INCLUDE_DIRECTORIES>
     -Dtest_target_includes7=$<TARGET_PROPERTY:empty1,INTERFACE_INCLUDE_DIRECTORIES>
     -Dtest_target_includes8=$<TARGET_PROPERTY:empty5,INCLUDE_DIRECTORIES>
+    -Dtest_target_closure1=$<JOIN:$<LIST:SORT,${interface1MergeSources}>,$<COMMA>>
+    -Dtest_target_closure2=$<JOIN:$<LIST:SORT,$<TARGET_PROPERTY:interface2,INTERFACE_SOURCES>>,$<COMMA>>
     -Dtest_arbitrary_content_comma_1=$<1:a,>
     -Dtest_arbitrary_content_comma_2=$<1:,a>
     -Dtest_arbitrary_content_comma_3=$<1:a,,>
@@ -214,6 +226,22 @@ set_property(TARGET importedFallback2 PROPERTY IMPORTED_IMPLIB_SPECIAL special_i
 set_property(TARGET importedFallback2 PROPERTY MAP_IMPORTED_CONFIG_NOCONFIG SPECIAL "")
 set_property(TARGET importedFallback2 PROPERTY MAP_IMPORTED_CONFIG_DEBUG SPECIAL "")
 set_property(TARGET importedFallback2 PROPERTY MAP_IMPORTED_CONFIG_RELEASE SPECIAL "")
+set_property(TARGET importedFallback2 PROPERTY MAP_IMPORTED_CONFIG_RELWITHDEBINFO SPECIAL "")
+
+add_library(importedFallback3 SHARED IMPORTED)
+set_property(TARGET importedFallback3 PROPERTY IMPORTED_LOCATION_DEBUG debug_loc)
+set_property(TARGET importedFallback3 PROPERTY IMPORTED_LOCATION_RELEASE release_loc)
+set_property(TARGET importedFallback3 PROPERTY IMPORTED_LOCATION fallback_loc)
+set_property(TARGET importedFallback3 PROPERTY IMPORTED_IMPLIB imp_loc)
+set_property(TARGET importedFallback3 PROPERTY MAP_IMPORTED_CONFIG_DEBUG "" DEBUG)
+set_property(TARGET importedFallback3 PROPERTY MAP_IMPORTED_CONFIG_RELEASE "")
+
+add_library(importedFallback4 SHARED IMPORTED)
+set_property(TARGET importedFallback4 PROPERTY IMPORTED_LOCATION fallback_loc)
+set_property(TARGET importedFallback4 PROPERTY IMPORTED_IMPLIB imp_loc)
+
+add_library(importedFallback5 SHARED IMPORTED)
+set_property(TARGET importedFallback5 PROPERTY IMPORTED_IMPLIB imp_loc)
 
 add_library(importedFallback_genex STATIC IMPORTED)
 set_property(TARGET importedFallback_genex PROPERTY IMPORTED_CONFIGURATIONS RELEASE)
@@ -232,7 +260,10 @@ add_custom_target(check-part3 ALL
     -Dconfig=$<CONFIGURATION>
     -Dtest_imported_includes=$<TARGET_PROPERTY:imported4,INCLUDE_DIRECTORIES>
     -Dtest_imported_fallback=$<STREQUAL:$<TARGET_FILE_NAME:importedFallback>,fallback_loc>
-    -Dtest_imported_fallback2=$<IF:$<OR:$<PLATFORM_ID:Windows,CYGWIN,MSYS>,$<AND:$<PLATFORM_ID:Darwin>,$<BOOL:${CMAKE_TAPI}>>>,$<STREQUAL:$<TARGET_LINKER_FILE_NAME:importedFallback2>,special_imp>,$<STREQUAL:$<TARGET_LINKER_FILE_NAME:importedFallback2>,fallback_loc>>
+    -Dtest_imported_fallback2=$<STREQUAL:$<TARGET_LINKER_FILE_NAME:importedFallback2>,special_imp>
+    -Dtest_imported_fallback3=$<IF:$<PLATFORM_ID:Windows,CYGWIN,MSYS>,$<STREQUAL:$<TARGET_LINKER_FILE_NAME:importedFallback3>,imp_loc>,$<STREQUAL:$<TARGET_LINKER_FILE_NAME:importedFallback3>,fallback_loc>>
+    -Dtest_imported_fallback4=$<IF:$<PLATFORM_ID:Windows,CYGWIN,MSYS>,$<STREQUAL:$<TARGET_LINKER_FILE_NAME:importedFallback4>,imp_loc>,$<STREQUAL:$<TARGET_LINKER_FILE_NAME:importedFallback4>,fallback_loc>>
+    -Dtest_imported_fallback5=$<STREQUAL:$<TARGET_LINKER_FILE_NAME:importedFallback5>,imp_loc>
     -Dtest_imported_fallback_genex=$<STREQUAL:$<TARGET_PROPERTY:importedFallback_genex,INTERFACE_COMPILE_DEFINITIONS>,FOOBAR=1>
     -Dtest_alias_file_exe=$<STREQUAL:$<TARGET_FILE:Alias::SomeExe>,$<TARGET_FILE:someexe>>
     -Dtest_alias_file_lib=$<STREQUAL:$<TARGET_FILE:Alias::SomeLib>,$<TARGET_FILE:empty1>>
@@ -407,11 +438,7 @@ add_test(echo-old-style echo "\$<CONFIGURATION>")
 set_property(TEST echo-old-style PROPERTY
     PASS_REGULAR_EXPRESSION "^\\$<CONFIGURATION>\n$")
 
-add_subdirectory(CMP0044 ${CMAKE_BINARY_DIR}/CMP0044-WARN)
-set(CMP0044_TYPE NEW)
-add_subdirectory(CMP0044 ${CMAKE_BINARY_DIR}/CMP0044-NEW)
-set(CMP0044_TYPE OLD)
-add_subdirectory(CMP0044 ${CMAKE_BINARY_DIR}/CMP0044-OLD)
+add_subdirectory(CMP0044)
 
 if(NOT CMAKE_GENERATOR STREQUAL Xcode OR NOT CMAKE_OSX_ARCHITECTURES MATCHES "[;$]")
   add_library(objlib OBJECT objlib1.c objlib2.c)

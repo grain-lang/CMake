@@ -1,8 +1,10 @@
 /* Distributed under the OSI-approved BSD 3-Clause License.  See accompanying
-   file Copyright.txt or https://cmake.org/licensing for details.  */
+   file LICENSE.rst or https://cmake.org/licensing for details.  */
 #include "cmCPackPKGGenerator.h"
 
 #include <vector>
+
+#include <cmext/string_view>
 
 #include "cmCPackComponentGroup.h"
 #include "cmCPackGenerator.h"
@@ -33,30 +35,29 @@ int cmCPackPKGGenerator::InitializeInternal()
 }
 
 std::string cmCPackPKGGenerator::GetPackageName(
-  const cmCPackComponent& component)
+  cmCPackComponent const& component)
 {
   if (component.ArchiveFile.empty()) {
     std::string packagesDir =
       cmStrCat(this->GetOption("CPACK_TEMPORARY_DIRECTORY"), ".dummy");
-    std::ostringstream out;
-    out << cmSystemTools::GetFilenameWithoutLastExtension(packagesDir) << "-"
-        << component.Name << ".pkg";
-    return out.str();
+    return cmStrCat(
+      cmSystemTools::GetFilenameWithoutLastExtension(packagesDir), '-',
+      component.Name, ".pkg");
   }
 
-  return component.ArchiveFile + ".pkg";
+  return cmStrCat(component.ArchiveFile, ".pkg");
 }
 
-void cmCPackPKGGenerator::CreateBackground(const char* themeName,
-                                           const char* metapackageFile,
+void cmCPackPKGGenerator::CreateBackground(char const* themeName,
+                                           char const* metapackageFile,
                                            cm::string_view genName,
                                            cmXMLWriter& xout)
 {
   std::string paramSuffix =
-    (themeName == nullptr) ? "" : cmSystemTools::UpperCase(themeName);
-  std::string opt = (themeName == nullptr)
-    ? cmStrCat("CPACK_", genName, "_BACKGROUND")
-    : cmStrCat("CPACK_", genName, "_BACKGROUND_", paramSuffix);
+    themeName ? cmSystemTools::UpperCase(themeName) : "";
+  std::string opt = themeName
+    ? cmStrCat("CPACK_", genName, "_BACKGROUND_", paramSuffix)
+    : cmStrCat("CPACK_", genName, "_BACKGROUND");
   cmValue bgFileName = this->GetOption(opt);
   if (!bgFileName) {
     return;
@@ -72,21 +73,21 @@ void cmCPackPKGGenerator::CreateBackground(const char* themeName,
     return;
   }
 
-  if (themeName == nullptr) {
-    xout.StartElement("background");
-  } else {
+  if (themeName) {
     xout.StartElement(cmStrCat("background-", themeName));
+  } else {
+    xout.StartElement("background");
   }
 
   xout.Attribute("file", *bgFileName);
 
   cmValue param = this->GetOption(cmStrCat(opt, "_ALIGNMENT"));
-  if (param != nullptr) {
+  if (param) {
     xout.Attribute("alignment", *param);
   }
 
   param = this->GetOption(cmStrCat(opt, "_SCALING"));
-  if (param != nullptr) {
+  if (param) {
     xout.Attribute("scaling", *param);
   }
 
@@ -94,20 +95,20 @@ void cmCPackPKGGenerator::CreateBackground(const char* themeName,
   // attribute for the background, but I've seen examples that
   // doesn't have them, so don't make them mandatory.
   param = this->GetOption(cmStrCat(opt, "_MIME_TYPE"));
-  if (param != nullptr) {
+  if (param) {
     xout.Attribute("mime-type", *param);
   }
 
   param = this->GetOption(cmStrCat(opt, "_UTI"));
-  if (param != nullptr) {
+  if (param) {
     xout.Attribute("uti", *param);
   }
 
   xout.EndElement();
 }
 
-void cmCPackPKGGenerator::WriteDistributionFile(const char* metapackageFile,
-                                                const char* genName)
+void cmCPackPKGGenerator::WriteDistributionFile(char const* metapackageFile,
+                                                char const* genName)
 {
   std::string distributionTemplate =
     this->FindTemplate("CPack.distribution.dist.in");
@@ -151,7 +152,7 @@ void cmCPackPKGGenerator::WriteDistributionFile(const char* metapackageFile,
 
   // Emit the outline for the groups
   for (auto const& group : this->ComponentGroups) {
-    if (group.second.ParentGroup == nullptr) {
+    if (!group.second.ParentGroup) {
       CreateChoiceOutline(group.second, xChoiceOut);
     }
   }
@@ -160,14 +161,15 @@ void cmCPackPKGGenerator::WriteDistributionFile(const char* metapackageFile,
   for (auto const& comp : this->Components) {
     if (!comp.second.Group) {
       xChoiceOut.StartElement("line");
-      xChoiceOut.Attribute("choice", comp.first + "Choice");
+      xChoiceOut.Attribute("choice", cmStrCat(comp.first, "Choice"));
       xChoiceOut.Content(""); // Avoid self-closing tag.
       xChoiceOut.EndElement();
     }
   }
   if (!this->PostFlightComponent.Name.empty()) {
     xChoiceOut.StartElement("line");
-    xChoiceOut.Attribute("choice", PostFlightComponent.Name + "Choice");
+    xChoiceOut.Attribute("choice",
+                         cmStrCat(PostFlightComponent.Name, "Choice"));
     xChoiceOut.Content(""); // Avoid self-closing tag.
     xChoiceOut.EndElement();
   }
@@ -204,28 +206,28 @@ void cmCPackPKGGenerator::WriteDistributionFile(const char* metapackageFile,
 }
 
 void cmCPackPKGGenerator::CreateChoiceOutline(
-  const cmCPackComponentGroup& group, cmXMLWriter& xout)
+  cmCPackComponentGroup const& group, cmXMLWriter& xout)
 {
   xout.StartElement("line");
-  xout.Attribute("choice", group.Name + "Choice");
+  xout.Attribute("choice", cmStrCat(group.Name, "Choice"));
   for (cmCPackComponentGroup* subgroup : group.Subgroups) {
     CreateChoiceOutline(*subgroup, xout);
   }
 
   for (cmCPackComponent* comp : group.Components) {
     xout.StartElement("line");
-    xout.Attribute("choice", comp->Name + "Choice");
+    xout.Attribute("choice", cmStrCat(comp->Name, "Choice"));
     xout.Content(""); // Avoid self-closing tag.
     xout.EndElement();
   }
   xout.EndElement();
 }
 
-void cmCPackPKGGenerator::CreateChoice(const cmCPackComponentGroup& group,
+void cmCPackPKGGenerator::CreateChoice(cmCPackComponentGroup const& group,
                                        cmXMLWriter& xout)
 {
   xout.StartElement("choice");
-  xout.Attribute("id", group.Name + "Choice");
+  xout.Attribute("id", cmStrCat(group.Name, "Choice"));
   xout.Attribute("title", group.DisplayName);
   xout.Attribute("start_selected", "true");
   xout.Attribute("start_enabled", "true");
@@ -236,7 +238,7 @@ void cmCPackPKGGenerator::CreateChoice(const cmCPackComponentGroup& group,
   xout.EndElement();
 }
 
-void cmCPackPKGGenerator::CreateChoice(const cmCPackComponent& component,
+void cmCPackPKGGenerator::CreateChoice(cmCPackComponent const& component,
                                        cmXMLWriter& xout)
 {
   std::string packageId;
@@ -249,7 +251,7 @@ void cmCPackPKGGenerator::CreateChoice(const cmCPackComponent& component,
   }
 
   xout.StartElement("choice");
-  xout.Attribute("id", component.Name + "Choice");
+  xout.Attribute("id", cmStrCat(component.Name, "Choice"));
   xout.Attribute("title", component.DisplayName);
   xout.Attribute(
     "start_selected",
@@ -276,7 +278,7 @@ void cmCPackPKGGenerator::CreateChoice(const cmCPackComponent& component,
     // on (B and A), while selecting something that depends on C--either D
     // or E--will automatically cause C to get selected.
     std::ostringstream selected("my.choice.selected", std::ios_base::ate);
-    std::set<const cmCPackComponent*> visited;
+    std::set<cmCPackComponent const*> visited;
     AddDependencyAttributes(component, visited, selected);
     visited.clear();
     AddReverseDependencyAttributes(component, visited, selected);
@@ -348,8 +350,8 @@ void cmCPackPKGGenerator::CreateDomains(cmXMLWriter& xout)
 }
 
 void cmCPackPKGGenerator::AddDependencyAttributes(
-  const cmCPackComponent& component,
-  std::set<const cmCPackComponent*>& visited, std::ostringstream& out)
+  cmCPackComponent const& component,
+  std::set<cmCPackComponent const*>& visited, std::ostringstream& out)
 {
   if (visited.find(&component) != visited.end()) {
     return;
@@ -363,8 +365,8 @@ void cmCPackPKGGenerator::AddDependencyAttributes(
 }
 
 void cmCPackPKGGenerator::AddReverseDependencyAttributes(
-  const cmCPackComponent& component,
-  std::set<const cmCPackComponent*>& visited, std::ostringstream& out)
+  cmCPackComponent const& component,
+  std::set<cmCPackComponent const*>& visited, std::ostringstream& out)
 {
   if (visited.find(&component) != visited.end()) {
     return;
@@ -377,19 +379,18 @@ void cmCPackPKGGenerator::AddReverseDependencyAttributes(
   }
 }
 
-bool cmCPackPKGGenerator::CopyCreateResourceFile(const std::string& name,
-                                                 const std::string& dirName)
+bool cmCPackPKGGenerator::CopyCreateResourceFile(std::string const& name,
+                                                 std::string const& dirName)
 {
   std::string uname = cmSystemTools::UpperCase(name);
-  std::string cpackVar = "CPACK_RESOURCE_FILE_" + uname;
+  std::string cpackVar = cmStrCat("CPACK_RESOURCE_FILE_", uname);
   cmValue inFileName = this->GetOption(cpackVar);
   if (!inFileName) {
     cmCPackLogger(cmCPackLog::LOG_ERROR,
-                  "CPack option: " << cpackVar.c_str()
-                                   << " not specified. It should point to "
-                                   << (!name.empty() ? name : "<empty>")
-                                   << ".rtf, " << name << ".html, or " << name
-                                   << ".txt file" << std::endl);
+                  "CPack option: "
+                    << cpackVar << " not specified. It should point to "
+                    << (!name.empty() ? name : "<empty>") << ".rtf, " << name
+                    << ".html, or " << name << ".txt file" << std::endl);
     return false;
   }
   if (!cmSystemTools::FileExists(inFileName)) {
@@ -400,7 +401,8 @@ bool cmCPackPKGGenerator::CopyCreateResourceFile(const std::string& name,
     return false;
   }
   std::string ext = cmSystemTools::GetFilenameLastExtension(inFileName);
-  if (ext != ".rtfd" && ext != ".rtf" && ext != ".html" && ext != ".txt") {
+  if (ext != ".rtfd"_s && ext != ".rtf"_s && ext != ".html"_s &&
+      ext != ".txt"_s) {
     cmCPackLogger(
       cmCPackLog::LOG_ERROR,
       "Bad file extension specified: "
@@ -414,7 +416,8 @@ bool cmCPackPKGGenerator::CopyCreateResourceFile(const std::string& name,
 
   // Set this so that distribution.dist gets the right name (without
   // the path).
-  this->SetOption("CPACK_RESOURCE_FILE_" + uname + "_NOPATH", (name + ext));
+  this->SetOption(cmStrCat("CPACK_RESOURCE_FILE_", uname, "_NOPATH"),
+                  cmStrCat(name, ext));
 
   cmCPackLogger(cmCPackLog::LOG_VERBOSE,
                 "Configure file: " << (inFileName ? *inFileName : "(NULL)")
@@ -423,15 +426,15 @@ bool cmCPackPKGGenerator::CopyCreateResourceFile(const std::string& name,
   return true;
 }
 
-bool cmCPackPKGGenerator::CopyResourcePlistFile(const std::string& name,
-                                                const char* outName)
+bool cmCPackPKGGenerator::CopyResourcePlistFile(std::string const& name,
+                                                char const* outName)
 {
   if (!outName) {
     outName = name.c_str();
   }
 
   std::string inFName = cmStrCat("CPack.", name, ".in");
-  std::string inFileName = this->FindTemplate(inFName.c_str());
+  std::string inFileName = this->FindTemplate(inFName);
   if (inFileName.empty()) {
     cmCPackLogger(cmCPackLog::LOG_ERROR,
                   "Cannot find input file: " << inFName << std::endl);
@@ -448,13 +451,13 @@ bool cmCPackPKGGenerator::CopyResourcePlistFile(const std::string& name,
   return true;
 }
 
-int cmCPackPKGGenerator::CopyInstallScript(const std::string& resdir,
-                                           const std::string& script,
-                                           const std::string& name)
+int cmCPackPKGGenerator::CopyInstallScript(std::string const& resdir,
+                                           std::string const& script,
+                                           std::string const& name)
 {
   std::string dst = cmStrCat(resdir, '/', name);
   cmSystemTools::CopyFileAlways(script, dst);
-  cmSystemTools::SetPermissions(dst.c_str(), 0777);
+  cmSystemTools::SetPermissions(dst, 0777);
   cmCPackLogger(cmCPackLog::LOG_VERBOSE,
                 "copy script : " << script << "\ninto " << dst << std::endl);
 

@@ -1,8 +1,7 @@
 /* Distributed under the OSI-approved BSD 3-Clause License.  See accompanying
-   file Copyright.txt or https://cmake.org/licensing for details.  */
+   file LICENSE.rst or https://cmake.org/licensing for details.  */
 
 #include <cstdint>
-#include <functional>
 #include <memory>
 #include <string>
 #include <unordered_set>
@@ -196,19 +195,15 @@ static bool testNoSupportsVariableType()
       CreateVariablesRequest(vars->GetId()));
 
   ASSERT_TRUE(variables.size() == 2);
-  ASSERT_VARIABLE(variables[0], "Children", "", nullptr);
-  ASSERT_VARIABLE(variables[1], "test", "value", nullptr);
+  ASSERT_VARIABLE(variables[0], "Children", "", "");
+  ASSERT_VARIABLE(variables[1], "test", "value", "");
 
   return true;
 }
 
 int testDebuggerVariables(int, char*[])
 {
-  return runTests(std::vector<std::function<bool()>>{
-    testUniqueIds,
-    testConstructors,
-    testIgnoreEmptyStringEntries,
-    testSortTheResult,
-    testNoSupportsVariableType,
-  });
+  return runTests({ testUniqueIds, testConstructors,
+                    testIgnoreEmptyStringEntries, testSortTheResult,
+                    testNoSupportsVariableType });
 }

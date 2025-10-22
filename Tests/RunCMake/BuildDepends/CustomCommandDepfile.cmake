@@ -24,6 +24,17 @@ add_library(toplib STATIC toplib.c)
 
 add_subdirectory(DepfileSubdir)
 
+set(TEST_SPACE 1)
+if(CMAKE_GENERATOR STREQUAL "Unix Makefiles")
+  execute_process(COMMAND "${CMAKE_MAKE_PROGRAM}" no_such_target --version RESULT_VARIABLE res OUTPUT_VARIABLE out ERROR_VARIABLE out)
+  if(NOT res EQUAL 0 OR NOT out MATCHES "GNU")
+    set(TEST_SPACE 0)
+  endif()
+endif()
+if(TEST_SPACE)
+  add_subdirectory(DepfileSubdirWithSpace)
+endif()
+
 add_custom_command(
   OUTPUT toplib2.c
   DEPFILE toplib2.c.d
@@ -66,5 +77,14 @@ if(check_step EQUAL 3)
     \"${CMAKE_BINARY_DIR}/step3.timestamp|$<TARGET_FILE:subexe>\"
     \"${CMAKE_BINARY_DIR}/step3.timestamp|$<TARGET_FILE:sublib>\"
     )
+
+  if (RunCMake_GENERATOR MATCHES \"Make\")
+    file(STRINGS \"${CMAKE_BINARY_DIR}/CMakeFiles/topcc.dir/compiler_depend.internal\" deps REGEX \"^.*topccdep\\\\.txt$\")
+    list(LENGTH deps count)
+    if (NOT count EQUAL 1)
+       string(APPEND RunCMake_TEST_FAILED \"dependencies are duplicated\\n\")
+       set(RunCMake_TEST_FAILED \"\${RunCMake_TEST_FAILED}\" PARENT_SCOPE)
+    endif()
+  endif()
 endif()
 ")

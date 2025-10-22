@@ -1,5 +1,5 @@
 /* Distributed under the OSI-approved BSD 3-Clause License.  See accompanying
-   file Copyright.txt or https://cmake.org/licensing for details.  */
+   file LICENSE.rst or https://cmake.org/licensing for details.  */
 
 #include "cmBinUtilsWindowsPEDumpbinGetRuntimeDependenciesTool.h"
 
@@ -9,6 +9,7 @@
 
 #include "cmRuntimeDependencyArchive.h"
 #include "cmUVProcessChain.h"
+#include "cmUVStream.h"
 
 cmBinUtilsWindowsPEDumpbinGetRuntimeDependenciesTool::
   cmBinUtilsWindowsPEDumpbinGetRuntimeDependenciesTool(
@@ -18,7 +19,7 @@ cmBinUtilsWindowsPEDumpbinGetRuntimeDependenciesTool::
 }
 
 bool cmBinUtilsWindowsPEDumpbinGetRuntimeDependenciesTool::GetFileInfo(
-  const std::string& file, std::vector<std::string>& needed)
+  std::string const& file, std::vector<std::string>& needed)
 {
   cmUVProcessChainBuilder builder;
   builder.SetBuiltinStream(cmUVProcessChainBuilder::Stream_OUTPUT);
@@ -33,7 +34,7 @@ bool cmBinUtilsWindowsPEDumpbinGetRuntimeDependenciesTool::GetFileInfo(
   builder.AddCommand(command);
 
   auto process = builder.Start();
-  if (!process.Valid()) {
+  if (!process.Valid() || process.GetStatus(0).SpawnResult != 0) {
     std::ostringstream e;
     e << "Failed to start dumpbin process for:\n  " << file;
     this->SetError(e.str());
@@ -41,9 +42,10 @@ bool cmBinUtilsWindowsPEDumpbinGetRuntimeDependenciesTool::GetFileInfo(
   }
 
   std::string line;
-  static const cmsys::RegularExpression regex(
+  static cmsys::RegularExpression const regex(
     "^    ([^\n]*\\.[Dd][Ll][Ll])\r$");
-  while (std::getline(*process.OutputStream(), line)) {
+  cmUVPipeIStream output(process.GetLoop(), process.OutputStream());
+  while (std::getline(output, line)) {
     cmsys::RegularExpressionMatch match;
     if (regex.find(line.c_str(), match)) {
       needed.push_back(match.match(1));
@@ -56,8 +58,7 @@ bool cmBinUtilsWindowsPEDumpbinGetRuntimeDependenciesTool::GetFileInfo(
     this->SetError(e.str());
     return false;
   }
-  auto status = process.GetStatus();
-  if (!status[0] || status[0]->ExitStatus != 0) {
+  if (process.GetStatus(0).ExitStatus != 0) {
     std::ostringstream e;
     e << "Failed to run dumpbin on:\n  " << file;
     this->SetError(e.str());

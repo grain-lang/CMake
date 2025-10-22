@@ -1,5 +1,5 @@
 /* Distributed under the OSI-approved BSD 3-Clause License.  See accompanying
-   file Copyright.txt or https://cmake.org/licensing for details.  */
+   file LICENSE.rst or https://cmake.org/licensing for details.  */
 #if defined(__CYGWIN__)
 // For S_IWRITE symbol
 #  define _DEFAULT_SOURCE
@@ -15,10 +15,11 @@
 #include "cmUuid.h"
 #include "cmWIXAccessControlList.h"
 
-cmWIXFilesSourceWriter::cmWIXFilesSourceWriter(cmCPackLog* logger,
+cmWIXFilesSourceWriter::cmWIXFilesSourceWriter(unsigned long wixVersion,
+                                               cmCPackLog* logger,
                                                std::string const& filename,
                                                GuidType componentGuidType)
-  : cmWIXSourceWriter(logger, filename, componentGuidType)
+  : cmWIXSourceWriter(wixVersion, logger, filename, componentGuidType)
 {
 }
 

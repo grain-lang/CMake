@@ -1,8 +1,7 @@
 #
 # A more complex test case
 #
-cmake_minimum_required(VERSION 2.4)
-cmake_policy(SET CMP0054 NEW)
+cmake_minimum_required(VERSION 3.10)
 project (Complex)
 
 # Inform the test if the debug configuration is getting built.
@@ -12,31 +11,6 @@ string(APPEND CMAKE_C_FLAGS_RELWITHDEBINFO " -DCOMPLEX_NDEBUG")
 string(APPEND CMAKE_CXX_FLAGS_RELWITHDEBINFO " -DCOMPLEX_NDEBUG")
 string(APPEND CMAKE_C_FLAGS_MINSIZEREL " -DCOMPLEX_NDEBUG")
 string(APPEND CMAKE_CXX_FLAGS_MINSIZEREL " -DCOMPLEX_NDEBUG")
-
-# Try setting a new policy.  The IF test is for coverage.
-if(POLICY CMP0003)
-  cmake_policy(SET CMP0003 NEW)
-
-  cmake_policy(GET CMP0003 P3)
-  if(NOT "${P3}" STREQUAL "NEW")
-    message(FATAL_ERROR "cmake_policy(GET) did not report NEW!")
-  endif()
-endif()
-
-# It is not recommended to set a policy to OLD, but this test
-# covers the OLD behavior of some policies.
-foreach(p
-    CMP0029
-    CMP0032
-    CMP0033
-    CMP0034
-    CMP0043
-    CMP0050
-    )
-  if(POLICY ${p})
-    cmake_policy(SET ${p} OLD)
-  endif()
-endforeach()
 
 # Test building without per-rule echo lines in Makefiles.
 set_property(GLOBAL PROPERTY RULE_MESSAGES OFF)
@@ -95,7 +69,7 @@ if(NOT 2.4 EQUAL 2.4)
 endif()
 
 if(CMAKE_SYSTEM MATCHES "OSF1-V")
-  if(NOT CMAKE_COMPILER_IS_GNUCXX)
+  if(NOT CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
      string(APPEND CMAKE_CXX_FLAGS " -timplicit_local -no_implicit_include ")
   endif()
 endif()
@@ -103,18 +77,6 @@ endif()
 
 add_definitions(-DCMAKE_IS_FUN)
 add_definitions(-DCMAKE_IS_REALLY_FUN)
-set_property(DIRECTORY
-  PROPERTY COMPILE_DEFINITIONS_RELEASE
-  CMAKE_IS_FUN_IN_RELEASE_MODE
-  )
-set_property(DIRECTORY
-  PROPERTY COMPILE_DEFINITIONS_RELWITHDEBINFO
-  CMAKE_IS_FUN_IN_RELEASE_MODE
-  )
-set_property(DIRECTORY
-  PROPERTY COMPILE_DEFINITIONS_MINSIZEREL
-  CMAKE_IS_FUN_IN_RELEASE_MODE
-  )
 
 set(TEST_SEP "a b c")
 separate_arguments(TEST_SEP)
@@ -231,6 +193,12 @@ configure_file(
   ${Complex_SOURCE_DIR}/Library/dummy
   ${Complex_BINARY_DIR}/Library/dummylib.lib
   COPYONLY)
+if(CMAKE_C_COMPILER_ID STREQUAL "OrangeC")
+  configure_file(
+    ${Complex_SOURCE_DIR}/Library/dummy
+    ${Complex_BINARY_DIR}/Library/dummylib.l
+    COPYONLY)
+endif()
 foreach (ext ${CMAKE_SHLIB_SUFFIX};.so;.a;.sl)
   configure_file(
     ${Complex_SOURCE_DIR}/Library/dummy
@@ -284,12 +252,12 @@ if (WIN32)
       ${Complex_SOURCE_DIR}/Library/dummy
       "${dir}/${file}"
       COPYONLY)
-    exec_program(${CMAKE_COMMAND} ARGS "-E write_regv \"${hkey}\" \"${dir}\"")
+    execute_process(COMMAND ${CMAKE_COMMAND} -E write_regv "${hkey}" "${dir}")
     find_path(REGISTRY_TEST_PATH
       ${file}
       "[${hkey}]" DOC "Registry_Test_Path")
-    exec_program(${CMAKE_COMMAND} ARGS "-E delete_regv \"${hkey}\"")
-    exec_program(${CMAKE_COMMAND} ARGS "-E rm -f \"${dir}/${file}\"")
+    execute_process(COMMAND ${CMAKE_COMMAND} -E delete_regv "${hkey}")
+    execute_process(COMMAND ${CMAKE_COMMAND} -E rm -f "${dir}/${file}")
   endif ()
 endif ()
 
@@ -401,6 +369,3 @@ endif()
 #
 add_subdirectory(Library)
 add_subdirectory(Executable)
-subdir_depends(Executable Library)
-export_library_dependencies(${Complex_BINARY_DIR}/ComplexLibraryDepends.cmake)
-include(${Complex_BINARY_DIR}/ComplexLibraryDepends.cmake OPTIONAL)

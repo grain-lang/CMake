@@ -1,11 +1,14 @@
 CMP0008
 -------
 
+.. |REMOVED_IN_CMAKE_VERSION| replace:: 4.0
+.. include:: include/REMOVED_PROLOGUE.rst
+
 Libraries linked by full-path must have a valid library file name.
 
 In CMake 2.4 and below it is possible to write code like
 
-::
+.. code-block:: cmake
 
   target_link_libraries(myexe /full/path/to/somelib)
 
@@ -28,8 +31,6 @@ split the library name from the path and ask the linker to search for
 it.  The ``NEW`` behavior for this policy is to trust the given path and
 pass it directly to the native build tool unchanged.
 
-This policy was introduced in CMake version 2.6.1.  CMake version
-|release| warns when the policy is not set and uses ``OLD`` behavior.  Use
-the :command:`cmake_policy` command to set it to ``OLD`` or ``NEW`` explicitly.
-
-.. include:: DEPRECATED.txt
+.. |INTRODUCED_IN_CMAKE_VERSION| replace:: 2.6.1
+.. |WARNED_OR_DID_NOT_WARN| replace:: warned
+.. include:: include/REMOVED_EPILOGUE.rst

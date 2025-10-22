@@ -1,10 +1,11 @@
 /* Distributed under the OSI-approved BSD 3-Clause License.  See accompanying
-   file Copyright.txt or https://cmake.org/licensing for details.  */
+   file LICENSE.rst or https://cmake.org/licensing for details.  */
 #include "cmCMakeHostSystemInformationCommand.h"
 
 #include <algorithm>
 #include <cassert>
 #include <cctype>
+#include <cstddef>
 #include <initializer_list>
 #include <map>
 #include <string>
@@ -34,7 +35,6 @@
 #  include "cmGlobalVisualStudio10Generator.h"
 #  include "cmGlobalVisualStudioVersionedGenerator.h"
 #  include "cmVSSetupHelper.h"
-#  define HAVE_VS_SETUP_HELPER
 #endif
 
 namespace {
@@ -46,7 +46,7 @@ std::string ValueToString(std::size_t const value)
   return std::to_string(value);
 }
 
-std::string ValueToString(const char* const value)
+std::string ValueToString(char const* const value)
 {
   return value ? value : std::string{};
 }
@@ -178,7 +178,7 @@ cm::optional<std::pair<std::string, std::string>> ParseOSReleaseLine(
         if (std::isalpha(ch) || ch == '_') {
           key += ch;
           state = PARSE_KEY;
-        } else if (!std::isspace(ch)) {
+        } else if (!cmIsSpace(ch)) {
           state = IGNORE_REST;
         }
         break;
@@ -238,7 +238,7 @@ cm::optional<std::pair<std::string, std::string>> ParseOSReleaseLine(
         break;
 
       case PARSE_VALUE:
-        if (ch == '#' || std::isspace(ch)) {
+        if (ch == '#' || cmIsSpace(ch)) {
           state = IGNORE_REST;
         } else {
           value += ch;
@@ -266,13 +266,13 @@ std::map<std::string, std::string> GetOSReleaseVariables(
   cmExecutionStatus& status)
 {
   auto& makefile = status.GetMakefile();
-  const auto& sysroot = makefile.GetSafeDefinition("CMAKE_SYSROOT");
+  auto const& sysroot = makefile.GetSafeDefinition("CMAKE_SYSROOT");
 
   std::map<std::string, std::string> data;
   // Based on
-  // https://www.freedesktop.org/software/systemd/man/os-release.html
+  // https://www.freedesktop.org/software/systemd/man/latest/os-release.html
   for (auto name : { "/etc/os-release"_s, "/usr/lib/os-release"_s }) {
-    const auto& filename = cmStrCat(sysroot, name);
+    auto const& filename = cmStrCat(sysroot, name);
     if (cmSystemTools::FileExists(filename)) {
       cmsys::ifstream fin(filename.c_str());
       for (std::string line; !std::getline(fin, line).fail();) {
@@ -377,25 +377,25 @@ std::map<std::string, std::string> GetOSReleaseVariables(
   return data;
 }
 
-cm::optional<std::string> GetValue(cmExecutionStatus& status,
-                                   std::string const& key,
-                                   std::string const& variable)
+cm::optional<std::string> GetDistribValue(cmExecutionStatus& status,
+                                          std::string const& key,
+                                          std::string const& variable)
 {
-  const auto prefix = "DISTRIB_"_s;
+  auto const prefix = "DISTRIB_"_s;
   if (!cmHasPrefix(key, prefix)) {
     return {};
   }
 
-  static const std::map<std::string, std::string> s_os_release =
+  static std::map<std::string, std::string> const s_os_release =
     GetOSReleaseVariables(status);
 
   auto& makefile = status.GetMakefile();
 
-  const std::string subkey =
+  std::string const subkey =
     key.substr(prefix.size(), key.size() - prefix.size());
   if (subkey == "INFO"_s) {
     std::string vars;
-    for (const auto& kv : s_os_release) {
+    for (auto const& kv : s_os_release) {
       auto cmake_var_name = cmStrCat(variable, '_', kv.first);
       vars += DELIM[!vars.empty()] + cmake_var_name;
       makefile.AddDefinition(cmake_var_name, kv.second);
@@ -404,7 +404,7 @@ cm::optional<std::string> GetValue(cmExecutionStatus& status,
   }
 
   // Query individual variable
-  const auto it = s_os_release.find(subkey);
+  auto const it = s_os_release.find(subkey);
   if (it != s_os_release.cend()) {
     return it->second;
   }
@@ -413,9 +413,89 @@ cm::optional<std::string> GetValue(cmExecutionStatus& status,
   return std::string{};
 }
 
-#ifdef HAVE_VS_SETUP_HELPER
-cm::optional<std::string> GetValue(cmExecutionStatus& status,
-                                   std::string const& key)
+#ifdef _WIN32
+std::string FindMSYSTEM_PREFIX(std::vector<std::string> prefixes)
+{
+  for (std::string const& prefix : prefixes) {
+    std::string out;
+    std::string err;
+    int ret;
+    // In a modern MSYSTEM environment we expect cygpath to be in PATH.
+    std::vector<std::string> cygpath_cmd{ "cygpath", "-w", prefix };
+    if (cmSystemTools::RunSingleCommand(cygpath_cmd, &out, &err, &ret, nullptr,
+                                        cmSystemTools::OUTPUT_NONE)) {
+      if (ret == 0) {
+        out = cmTrimWhitespace(out);
+        cmSystemTools::ConvertToUnixSlashes(out);
+        if (cmSystemTools::FileIsDirectory(out)) {
+          return out;
+        }
+      }
+    } else {
+      // In a legacy MSYSTEM environment (MinGW/MSYS 1.0) there is no
+      // cygpath but we expect 'sh' to be in PATH.
+      std::vector<std::string> sh_cmd{
+        "sh", "-c", cmStrCat("cd \"", prefix, "\" && cmd //c cd")
+      };
+      if (cmSystemTools::RunSingleCommand(sh_cmd, &out, &err, &ret, nullptr,
+                                          cmSystemTools::OUTPUT_NONE)) {
+        if (ret == 0) {
+          out = cmTrimWhitespace(out);
+          cmSystemTools::ConvertToUnixSlashes(out);
+          if (cmSystemTools::FileIsDirectory(out)) {
+            return out;
+          }
+        }
+      }
+    }
+  }
+  return {};
+}
+
+std::string FallbackMSYSTEM_PREFIX(cm::string_view msystem)
+{
+  // These layouts are used by distributions such as
+  // * MSYS2: https://www.msys2.org/docs/environments/
+  // * MinGW/MSYS 1.0: http://mingw.osdn.io/
+  if (msystem == "MSYS"_s) {
+    static std::string const msystem_msys = FindMSYSTEM_PREFIX({ "/usr" });
+    return msystem_msys;
+  }
+  if (msystem == "MINGW32"_s) {
+    static std::string const msystem_mingw32 =
+      FindMSYSTEM_PREFIX({ "/mingw32", "/mingw" });
+    return msystem_mingw32;
+  }
+  if (msystem == "MINGW64"_s) {
+    static std::string const msystem_mingw64 =
+      FindMSYSTEM_PREFIX({ "/mingw64" });
+    return msystem_mingw64;
+  }
+  if (msystem == "UCRT64"_s) {
+    static std::string const msystem_ucrt64 =
+      FindMSYSTEM_PREFIX({ "/ucrt64" });
+    return msystem_ucrt64;
+  }
+  if (msystem == "CLANG32"_s) {
+    static std::string const msystem_clang32 =
+      FindMSYSTEM_PREFIX({ "/clang32" });
+    return msystem_clang32;
+  }
+  if (msystem == "CLANG64"_s) {
+    static std::string const msystem_clang64 =
+      FindMSYSTEM_PREFIX({ "/clang64" });
+    return msystem_clang64;
+  }
+  if (msystem == "CLANGARM64"_s) {
+    static std::string const msystem_clangarm64 =
+      FindMSYSTEM_PREFIX({ "/clangarm64" });
+    return msystem_clangarm64;
+  }
+  return {};
+}
+
+cm::optional<std::string> GetWindowsValue(cmExecutionStatus& status,
+                                          std::string const& key)
 {
   auto* const gg = status.GetMakefile().GetGlobalGenerator();
   for (auto vs : { 15, 16, 17 }) {
@@ -446,6 +526,23 @@ cm::optional<std::string> GetValue(cmExecutionStatus& status,
     return vs10gen->FindMSBuildCommandEarly(&status.GetMakefile());
   }
 
+  if (key == "MSYSTEM_PREFIX") {
+    // MSYSTEM_PREFIX is meaningful only under a MSYSTEM environment.
+    cm::optional<std::string> ms = cmSystemTools::GetEnvVar("MSYSTEM");
+    if (!ms || ms->empty()) {
+      return std::string();
+    }
+    // Prefer the MSYSTEM_PREFIX environment variable.
+    if (cm::optional<std::string> msp =
+          cmSystemTools::GetEnvVar("MSYSTEM_PREFIX")) {
+      cmSystemTools::ConvertToUnixSlashes(*msp);
+      if (cmSystemTools::FileIsDirectory(*msp)) {
+        return msp;
+      }
+    }
+    // Fall back to known distribution layouts.
+    return FallbackMSYSTEM_PREFIX(*ms);
+  }
   return {};
 }
 #endif
@@ -507,14 +604,14 @@ bool QueryWindowsRegistry(Range args, cmExecutionStatus& status,
        (arguments.ValueNames || arguments.SubKeys)) ||
       (arguments.ValueName.empty() && arguments.ValueNames &&
        arguments.SubKeys)) {
-    status.SetError("given mutually exclusive sub-options \"VALUE\", "
-                    "\"VALUE_NAMES\" or \"SUBKEYS\".");
+    status.SetError("given mutually exclusive sub-options VALUE, "
+                    "VALUE_NAMES or SUBKEYS.");
     return false;
   }
 
   if (!arguments.View.empty() && !cmWindowsRegistry::ToView(arguments.View)) {
     status.SetError(
-      cmStrCat("given invalid value for \"VIEW\": ", arguments.View, '.'));
+      cmStrCat("given invalid value for VIEW: ", arguments.View, '.'));
     return false;
   }
 
@@ -529,12 +626,12 @@ bool QueryWindowsRegistry(Range args, cmExecutionStatus& status,
   if (arguments.ValueNames) {
     auto result = registry.GetValueNames(key, view);
     if (result) {
-      makefile.AddDefinition(variable, cmJoin(*result, ";"_s));
+      makefile.AddDefinition(variable, cmList::to_string(*result));
     }
   } else if (arguments.SubKeys) {
     auto result = registry.GetSubKeys(key, view);
     if (result) {
-      makefile.AddDefinition(variable, cmJoin(*result, ";"_s));
+      makefile.AddDefinition(variable, cmList::to_string(*result));
     }
   } else {
     auto result =
@@ -597,9 +694,9 @@ bool cmCMakeHostSystemInformationCommand(std::vector<std::string> const& args,
     auto value =
       GetValueChained(
           [&]() { return GetValue(info, key); }
-        , [&]() { return GetValue(status, key, variable); }
-#ifdef HAVE_VS_SETUP_HELPER
-        , [&]() { return GetValue(status, key); }
+        , [&]() { return GetDistribValue(status, key, variable); }
+#ifdef _WIN32
+        , [&]() { return GetWindowsValue(status, key); }
 #endif
         );
     // clang-format on

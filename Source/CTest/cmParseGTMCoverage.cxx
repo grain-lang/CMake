@@ -2,7 +2,6 @@
 
 #include <cstdio>
 #include <cstdlib>
-#include <map>
 #include <vector>
 
 #include "cmsys/Directory.hxx"
@@ -43,7 +42,7 @@ bool cmParseGTMCoverage::LoadCoverageData(std::string const& d)
   return true;
 }
 
-bool cmParseGTMCoverage::ReadMCovFile(const char* file)
+bool cmParseGTMCoverage::ReadMCovFile(char const* file)
 {
   cmsys::ifstream in(file);
   if (!in) {

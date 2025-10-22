@@ -1,6 +1,9 @@
 CMP0011
 -------
 
+.. |REMOVED_IN_CMAKE_VERSION| replace:: 4.0
+.. include:: include/REMOVED_PROLOGUE.rst
+
 Included scripts do automatic :command:`cmake_policy` PUSH and POP.
 
 In CMake 2.6.2 and below, CMake Policy settings in scripts loaded by
@@ -18,8 +21,6 @@ compatibility.  The ``OLD`` behavior for this policy is to imply
 The ``NEW`` behavior for this policy is to allow the commands to do
 their default cmake_policy ``PUSH`` and ``POP``.
 
-This policy was introduced in CMake version 2.6.3.  CMake version
-|release| warns when the policy is not set and uses ``OLD`` behavior.  Use
-the :command:`cmake_policy` command to set it to ``OLD`` or ``NEW`` explicitly.
-
-.. include:: DEPRECATED.txt
+.. |INTRODUCED_IN_CMAKE_VERSION| replace:: 2.6.3
+.. |WARNED_OR_DID_NOT_WARN| replace:: warned
+.. include:: include/REMOVED_EPILOGUE.rst

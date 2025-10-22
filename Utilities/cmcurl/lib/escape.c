@@ -29,41 +29,18 @@
 
 #include <curl/curl.h>
 
+struct Curl_easy;
+
 #include "urldata.h"
-#include "warnless.h"
+#include "curlx/warnless.h"
 #include "escape.h"
 #include "strdup.h"
+#include "curlx/strparse.h"
+
 /* The last 3 #include files should be in this order */
 #include "curl_printf.h"
 #include "curl_memory.h"
 #include "memdebug.h"
-
-/* Portable character check (remember EBCDIC). Do not use isalnum() because
-   its behavior is altered by the current locale.
-   See https://datatracker.ietf.org/doc/html/rfc3986#section-2.3
-*/
-bool Curl_isunreserved(unsigned char in)
-{
-  switch(in) {
-    case '0': case '1': case '2': case '3': case '4':
-    case '5': case '6': case '7': case '8': case '9':
-    case 'a': case 'b': case 'c': case 'd': case 'e':
-    case 'f': case 'g': case 'h': case 'i': case 'j':
-    case 'k': case 'l': case 'm': case 'n': case 'o':
-    case 'p': case 'q': case 'r': case 's': case 't':
-    case 'u': case 'v': case 'w': case 'x': case 'y': case 'z':
-    case 'A': case 'B': case 'C': case 'D': case 'E':
-    case 'F': case 'G': case 'H': case 'I': case 'J':
-    case 'K': case 'L': case 'M': case 'N': case 'O':
-    case 'P': case 'Q': case 'R': case 'S': case 'T':
-    case 'U': case 'V': case 'W': case 'X': case 'Y': case 'Z':
-    case '-': case '.': case '_': case '~':
-      return TRUE;
-    default:
-      break;
-  }
-  return FALSE;
-}
 
 /* for ABI-compatibility with previous versions */
 char *curl_escape(const char *string, int inlength)
@@ -80,53 +57,42 @@ char *curl_unescape(const char *string, int length)
 /* Escapes for URL the given unescaped string of given length.
  * 'data' is ignored since 7.82.0.
  */
-char *curl_easy_escape(struct Curl_easy *data, const char *string,
+char *curl_easy_escape(CURL *data, const char *string,
                        int inlength)
 {
   size_t length;
   struct dynbuf d;
   (void)data;
 
-  if(inlength < 0)
+  if(!string || (inlength < 0))
     return NULL;
 
-  Curl_dyn_init(&d, CURL_MAX_INPUT_LENGTH * 3);
-
-  length = (inlength?(size_t)inlength:strlen(string));
+  length = (inlength ? (size_t)inlength : strlen(string));
   if(!length)
     return strdup("");
 
-  while(length--) {
-    unsigned char in = *string++; /* treat the characters unsigned */
+  curlx_dyn_init(&d, length * 3 + 1);
 
-    if(Curl_isunreserved(in)) {
+  while(length--) {
+    /* treat the characters unsigned */
+    unsigned char in = (unsigned char)*string++;
+
+    if(ISUNRESERVED(in)) {
       /* append this */
-      if(Curl_dyn_addn(&d, &in, 1))
+      if(curlx_dyn_addn(&d, &in, 1))
         return NULL;
     }
     else {
       /* encode it */
-      const char hex[] = "0123456789ABCDEF";
-      char out[3]={'%'};
-      out[1] = hex[in>>4];
-      out[2] = hex[in & 0xf];
-      if(Curl_dyn_addn(&d, out, 3))
+      unsigned char out[3]={'%'};
+      Curl_hexbyte(&out[1], in, FALSE);
+      if(curlx_dyn_addn(&d, out, 3))
         return NULL;
     }
   }
 
-  return Curl_dyn_ptr(&d);
+  return curlx_dyn_ptr(&d);
 }
-
-static const unsigned char hextable[] = {
-  0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 0, 0, 0, 0, 0, 0,       /* 0x30 - 0x3f */
-  0, 10, 11, 12, 13, 14, 15, 0, 0, 0, 0, 0, 0, 0, 0, 0, /* 0x40 - 0x4f */
-  0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,       /* 0x50 - 0x5f */
-  0, 10, 11, 12, 13, 14, 15                             /* 0x60 - 0x66 */
-};
-
-/* the input is a single hex digit */
-#define onehex2dec(x) hextable[x - '0']
 
 /*
  * Curl_urldecode() URL decodes the given string.
@@ -154,7 +120,7 @@ CURLcode Curl_urldecode(const char *string, size_t length,
   DEBUGASSERT(string);
   DEBUGASSERT(ctrl >= REJECT_NADA); /* crash on TRUE/FALSE */
 
-  alloc = (length?length:strlen(string));
+  alloc = (length ? length : strlen(string));
   ns = malloc(alloc + 1);
 
   if(!ns)
@@ -164,12 +130,12 @@ CURLcode Curl_urldecode(const char *string, size_t length,
   *ostring = ns;
 
   while(alloc) {
-    unsigned char in = *string;
+    unsigned char in = (unsigned char)*string;
     if(('%' == in) && (alloc > 2) &&
        ISXDIGIT(string[1]) && ISXDIGIT(string[2])) {
       /* this is two hexadecimal digits following a '%' */
-      in = (unsigned char)(onehex2dec(string[1]) << 4) | onehex2dec(string[2]);
-
+      in = (unsigned char)((Curl_hexval(string[1]) << 4) |
+                           Curl_hexval(string[2]));
       string += 3;
       alloc -= 3;
     }
@@ -184,7 +150,7 @@ CURLcode Curl_urldecode(const char *string, size_t length,
       return CURLE_URL_MALFORMAT;
     }
 
-    *ns++ = in;
+    *ns++ = (char)in;
   }
   *ns = 0; /* terminate it */
 
@@ -202,12 +168,12 @@ CURLcode Curl_urldecode(const char *string, size_t length,
  * If olen == NULL, no output length is stored.
  * 'data' is ignored since 7.82.0.
  */
-char *curl_easy_unescape(struct Curl_easy *data, const char *string,
+char *curl_easy_unescape(CURL *data, const char *string,
                          int length, int *olen)
 {
   char *str = NULL;
   (void)data;
-  if(length >= 0) {
+  if(string && (length >= 0)) {
     size_t inputlen = (size_t)length;
     size_t outputlen;
     CURLcode res = Curl_urldecode(string, inputlen, &str, &outputlen,
@@ -232,4 +198,41 @@ char *curl_easy_unescape(struct Curl_easy *data, const char *string,
 void curl_free(void *p)
 {
   free(p);
+}
+
+/*
+ * Curl_hexencode()
+ *
+ * Converts binary input to lowercase hex-encoded ASCII output.
+ * Null-terminated.
+ */
+void Curl_hexencode(const unsigned char *src, size_t len, /* input length */
+                    unsigned char *out, size_t olen) /* output buffer size */
+{
+  DEBUGASSERT(src && len && (olen >= 3));
+  if(src && len && (olen >= 3)) {
+    while(len-- && (olen >= 3)) {
+      Curl_hexbyte(out, *src, TRUE);
+      ++src;
+      out += 2;
+      olen -= 2;
+    }
+    *out = 0;
+  }
+  else if(olen)
+    *out = 0;
+}
+
+/* Curl_hexbyte
+ *
+ * Output a single unsigned char as a two-digit hex number, lowercase or
+ * uppercase
+ */
+void Curl_hexbyte(unsigned char *dest, /* must fit two bytes */
+                  unsigned char val,
+                  bool lowercase)
+{
+  const unsigned char *t = lowercase ? Curl_ldigits : Curl_udigits;
+  dest[0] = t[val >> 4];
+  dest[1] = t[val & 0x0F];
 }

@@ -1,150 +1,589 @@
 # Distributed under the OSI-approved BSD 3-Clause License.  See accompanying
-# file Copyright.txt or https://cmake.org/licensing for details.
+# file LICENSE.rst or https://cmake.org/licensing for details.
 
 #[=======================================================================[.rst:
 FindProtobuf
 ------------
 
-Locate and configure the Google Protocol Buffers library.
+.. note::
+
+  If the Protobuf library is built and installed using its CMake-based
+  build system, it provides a :ref:`package configuration file
+  <Config File Packages>` for use with the :command:`find_package` command
+  in *config mode*:
+
+  .. code-block:: cmake
+
+    find_package(Protobuf CONFIG)
+
+  In this case, imported targets and CMake commands such as
+  :command:`protobuf_generate` are provided by the upstream package rather
+  than this module.  Additionally, some variables documented here are not
+  available in *config mode*, as imported targets are preferred.  For usage
+  details, refer to the upstream documentation, which is the recommended
+  way to use Protobuf with CMake.
+
+  This module works only in *module mode*.
+
+This module finds the Protocol Buffers library (Protobuf) in *module mode*:
+
+.. code-block:: cmake
+
+  find_package(Protobuf [<version>] [...])
+
+Protobuf is an open-source, language-neutral, and platform-neutral mechanism
+for serializing structured data, developed by Google.  It is commonly used
+for data exchange between programs or across networks.
 
 .. versionadded:: 3.6
-  Support for :command:`find_package` version checks.
+  Support for the ``<version>`` argument in
+  :command:`find_package(Protobuf \<version\>)`.
 
 .. versionchanged:: 3.6
-  All input and output variables use the ``Protobuf_`` prefix.
-  Variables with ``PROTOBUF_`` prefix are still supported for compatibility.
+  All input and output variables use the ``Protobuf_`` prefix.  Variables
+  with ``PROTOBUF_`` prefix are supported for backward compatibility.
 
-The following variables can be set and are optional:
+Imported Targets
+^^^^^^^^^^^^^^^^
 
-``Protobuf_SRC_ROOT_FOLDER``
-  When compiling with MSVC, if this cache variable is set
-  the protobuf-default VS project build locations
-  (vsprojects/Debug and vsprojects/Release
-  or vsprojects/x64/Debug and vsprojects/x64/Release)
-  will be searched for libraries and binaries.
-``Protobuf_IMPORT_DIRS``
-  List of additional directories to be searched for
-  imported .proto files.
-``Protobuf_DEBUG``
-  .. versionadded:: 3.6
+This module provides the following :ref:`Imported Targets`:
 
-  Show debug messages.
-``Protobuf_USE_STATIC_LIBS``
+``protobuf::libprotobuf``
   .. versionadded:: 3.9
 
-  Set to ON to force the use of the static libraries.
-  Default is OFF.
+  Target encapsulating the Protobuf library usage requirements, available if
+  Protobuf library is found.
 
-Defines the following variables:
+``protobuf::libprotobuf-lite``
+  .. versionadded:: 3.9
+
+  Target encapsulating the ``protobuf-lite`` library usage requirements,
+  available if Protobuf and its lite library are found.
+
+``protobuf::libprotoc``
+  .. versionadded:: 3.9
+
+  Target encapsulating the ``protoc`` library usage requirements, available
+  if Protobuf and its ``protoc`` library are found.
+
+``protobuf::protoc``
+  .. versionadded:: 3.10
+
+  Imported executable target encapsulating the ``protoc`` compiler usage
+  requirements, available if Protobuf and ``protoc`` are found.
+
+Result Variables
+^^^^^^^^^^^^^^^^
+
+This module defines the following variables:
 
 ``Protobuf_FOUND``
-  Found the Google Protocol Buffers library
-  (libprotobuf & header files)
+  Boolean indicating whether (the requested version of) Protobuf library is
+  found.
 ``Protobuf_VERSION``
   .. versionadded:: 3.6
 
-  Version of package found.
+  The version of Protobuf found.
 ``Protobuf_INCLUDE_DIRS``
-  Include directories for Google Protocol Buffers
+  Include directories needed to use Protobuf.
 ``Protobuf_LIBRARIES``
-  The protobuf libraries
+  Libraries needed to link against to use Protobuf.
 ``Protobuf_PROTOC_LIBRARIES``
-  The protoc libraries
+  Libraries needed to link against to use the ``protoc`` library.
 ``Protobuf_LITE_LIBRARIES``
-  The protobuf-lite libraries
+  Libraries needed to link against to use the ``protobuf-lite`` library.
 
-.. versionadded:: 3.9
-  The following :prop_tgt:`IMPORTED` targets are also defined:
+Cache Variables
+^^^^^^^^^^^^^^^
 
-``protobuf::libprotobuf``
-  The protobuf library.
-``protobuf::libprotobuf-lite``
-  The protobuf lite library.
-``protobuf::libprotoc``
-  The protoc library.
-``protobuf::protoc``
-  .. versionadded:: 3.10
-    The protoc compiler.
+The following cache variables may also be set:
 
-The following cache variables are also available to set or use:
-
-``Protobuf_LIBRARY``
-  The protobuf library
-``Protobuf_PROTOC_LIBRARY``
-  The protoc library
 ``Protobuf_INCLUDE_DIR``
-  The include directory for protocol buffers
+  The include directory containing Protobuf headers.
+``Protobuf_LIBRARY``
+  The path to the ``protobuf`` library.
+``Protobuf_PROTOC_LIBRARY``
+  The path to the ``protoc`` library.
 ``Protobuf_PROTOC_EXECUTABLE``
-  The protoc compiler
+  The path to the ``protoc`` compiler.
 ``Protobuf_LIBRARY_DEBUG``
-  The protobuf library (debug)
+  The path to the ``protobuf`` debug library.
 ``Protobuf_PROTOC_LIBRARY_DEBUG``
-  The protoc library (debug)
+  The path to the ``protoc`` debug library.
 ``Protobuf_LITE_LIBRARY``
-  The protobuf lite library
+  The path to the ``protobuf-lite`` library.
 ``Protobuf_LITE_LIBRARY_DEBUG``
-  The protobuf lite library (debug)
+  The path to the ``protobuf-lite`` debug library.
+``Protobuf_SRC_ROOT_FOLDER``
+  When compiling with MSVC, if this cache variable is set, the
+  protobuf-default Visual Studio project build locations will be searched for
+  libraries and binaries:
 
-Example:
+  * ``<Protobuf_SRC_ROOT_FOLDER>/vsprojects/{Debug,Release}``, or
+  * ``<Protobuf_SRC_ROOT_FOLDER>/vsprojects/x64/{Debug,Release}``
+
+Hints
+^^^^^
+
+This module accepts the following optional variables before calling the
+``find_package(Protobuf)``:
+
+``Protobuf_DEBUG``
+  .. versionadded:: 3.6
+
+  Boolean variable that enables debug messages of this module to be printed
+  for debugging purposes.
+
+``Protobuf_USE_STATIC_LIBS``
+  .. versionadded:: 3.9
+
+  Set to ON to force the use of the static libraries.  Default is OFF.
+
+Commands
+^^^^^^^^
+
+This module provides the following commands if Protobuf is found:
+
+Generating Source Files
+"""""""""""""""""""""""
+
+.. command:: protobuf_generate
+
+  .. versionadded:: 3.13
+
+  Automatically generates source files from ``.proto`` schema files at build
+  time:
+
+  .. code-block:: cmake
+
+    protobuf_generate(
+      [TARGET <target>]
+      [LANGUAGE <lang>]
+      [OUT_VAR <variable>]
+      [EXPORT_MACRO <macro>]
+      [PROTOC_OUT_DIR <out-dir>]
+      [PLUGIN <plugin>]
+      [PLUGIN_OPTIONS <plugin-options>]
+      [DEPENDENCIES <dependencies>...]
+      [PROTOS <proto-files>...]
+      [IMPORT_DIRS <dirs>...]
+      [APPEND_PATH]
+      [GENERATE_EXTENSIONS <extensions>...]
+      [PROTOC_OPTIONS <options>...]
+      [PROTOC_EXE <executable>]
+      [DESCRIPTORS]
+    )
+
+  ``TARGET <target>``
+    The CMake target to which the generated files are added as sources.  This
+    option is required when ``OUT_VAR <variable>`` is not used.
+
+  ``LANGUAGE <lang>``
+    A single value: ``cpp`` or ``python``.  Determines the kind of source
+    files to generate.  Defaults to ``cpp``.  For other languages, use the
+    ``GENERATE_EXTENSIONS`` option.
+
+  ``OUT_VAR <variable>``
+    The name of a CMake variable that will be populated with the paths to
+    the generated source files.
+
+  ``EXPORT_MACRO <macro>``
+    The name of a preprocessor macro applied to all generated Protobuf message
+    classes and extern variables.  This can be used, for example, to declare
+    DLL exports.  The macro should expand to ``__declspec(dllexport)`` or
+    ``__declspec(dllimport)``, depending on what is being compiled.
+
+    This option is only used when ``LANGUAGE`` is ``cpp``.
+
+  ``PROTOC_OUT_DIR <out-dir>``
+    The output directory for generated source files.  Defaults to:
+    :variable:`CMAKE_CURRENT_BINARY_DIR`.
+
+  ``PLUGIN <plugin>``
+    .. versionadded:: 3.21
+
+    An optional plugin executable.  This could be, for example, the path to
+    ``grpc_cpp_plugin``.
+
+  ``PLUGIN_OPTIONS <plugin-options>``
+    .. versionadded:: 3.28
+
+    Additional options passed to the plugin, such as ``generate_mock_code=true``
+    for the gRPC C++ plugin.
+
+  ``DEPENDENCIES <dependencies>...``
+    .. versionadded:: 3.28
+
+    Dependencies on which the generation of files depends on.  These are
+    forwarded to the underlying :command:`add_custom_command(DEPENDS)`
+    invocation.
+
+    .. versionchanged:: 4.1
+      This argument now accepts multiple values (``DEPENDENCIES a b c...``).
+      Previously, only a single value could be specified
+      (``DEPENDENCIES "a;b;c;..."``).
+
+  ``PROTOS <proto-files>...``
+    A list of ``.proto`` schema files to process.  If ``<target>`` is also
+    specified, these will be combined with all ``.proto`` source files from
+    that target.
+
+  ``IMPORT_DIRS <dirs>...``
+    A list of one or more common parent directories for the schema files.
+    For example, if the schema file is ``proto/helloworld/helloworld.proto``
+    and the import directory is ``proto/``, then the generated files will be
+    ``<out-dir>/helloworld/helloworld.pb.h`` and
+    ``<out-dir>/helloworld/helloworld.pb.cc``.
+
+  ``APPEND_PATH``
+    If specified, the base paths of all proto schema files are appended to
+    ``IMPORT_DIRS`` (it causes ``protoc`` to be invoked with ``-I`` argument
+    for each directory containing a ``.proto`` file).
+
+  ``GENERATE_EXTENSIONS <extensions>...``
+    If ``LANGUAGE`` is omitted, this must be set to specify the extensions
+    generated by ``protoc``.
+
+  ``PROTOC_OPTIONS <options>...``
+    .. versionadded:: 3.28
+
+    A list of additional command-line options passed directly to the
+    ``protoc`` compiler.
+
+  ``PROTOC_EXE <executable>``
+    .. versionadded:: 4.0
+
+    The command-line program, path, or CMake executable used to generate
+    Protobuf bindings.  If omitted, ``protobuf::protoc`` imported target is
+    used by default.
+
+  ``DESCRIPTORS``
+    If specified, a command-line option ``--descriptor_set_out=<proto-file>``
+    is appended to ``protoc`` compiler for each ``.proto`` source file,
+    enabling the creation of self-describing messages.  This option can only
+    be used when ``<lang>`` is ``cpp`` and Protobuf is found in *module mode*.
+
+    .. note::
+
+      This option is not available when Protobuf is found in *config mode*.
+
+Deprecated Commands
+"""""""""""""""""""
+
+The following commands are provided for backward compatibility.
+
+.. note::
+
+  The ``protobuf_generate_cpp()`` and ``protobuf_generate_python()``
+  commands work correctly only within the same directory scope, where
+  ``find_package(Protobuf ...)`` is called.
+
+.. note::
+
+  If Protobuf is found in *config mode*, the ``protobuf_generate_cpp()`` and
+  ``protobuf_generate_python()`` commands are **not available** as of
+  Protobuf version 3.0.0, unless the upstream package configuration hint
+  variable ``protobuf_MODULE_COMPATIBLE`` is set to boolean true before
+  calling ``find_package(Protobuf ...)``.
+
+.. command:: protobuf_generate_cpp
+
+  .. deprecated:: 4.1
+    Use :command:`protobuf_generate`.
+
+  Automatically generates C++ source files from ``.proto`` schema files at
+  build time:
+
+  .. code-block:: cmake
+
+    protobuf_generate_cpp(
+      <sources-variable>
+      <headers-variable>
+      [DESCRIPTORS <variable>]
+      [EXPORT_MACRO <macro>]
+      <proto-files>...
+    )
+
+  ``<sources-variable>``
+    Name of the variable to define, which will contain a list of generated
+    C++ source files.
+
+  ``<headers-variable>``
+    Name of the variable to define, which will contain a list of generated
+    header files.
+
+  ``DESCRIPTORS <variable>``
+    .. versionadded:: 3.10
+
+    Name of the variable to define, which will contain a list of generated
+    descriptor files if requested.
+
+    .. note::
+      This option is not available when Protobuf is found in *config mode*.
+
+  ``EXPORT_MACRO <macro>``
+    Name of a macro that should expand to ``__declspec(dllexport)`` or
+    ``__declspec(dllimport)``, depending on what is being compiled.
+
+  ``<proto-files>...``
+    One of more ``.proto`` files to be processed.
+
+.. command:: protobuf_generate_python
+
+  .. deprecated:: 4.1
+    Use :command:`protobuf_generate`.
+
+  .. versionadded:: 3.4
+
+  Automatically generates Python source files from ``.proto`` schema files at
+  build time:
+
+  .. code-block:: cmake
+
+    protobuf_generate_python(<python-sources-variable> <proto-files>...)
+
+  ``<python-sources-variable>``
+    Name of the variable to define, which will contain a list of generated
+    Python source files.
+
+  ``<proto-files>...``
+    One or more ``.proto`` files to be processed.
+
+---------------------------------------------------------------------
+
+The ``protobuf_generate_cpp()`` and ``protobuf_generate_python()`` commands
+accept the following optional variables before being invoked:
+
+``Protobuf_IMPORT_DIRS``
+  .. deprecated:: 4.1
+
+  A list of additional directories to search for imported ``.proto`` files.
+
+``PROTOBUF_GENERATE_CPP_APPEND_PATH``
+  .. deprecated:: 4.1
+    Use :command:`protobuf_generate(APPEND_PATH)` command option.
+
+  A boolean variable that, if set to boolean true, causes ``protoc`` to be
+  invoked with ``-I`` argument for each directory containing a ``.proto``
+  file.  By default, it is set to boolean true.
+
+Examples
+^^^^^^^^
+
+Examples: Finding Protobuf
+""""""""""""""""""""""""""
+
+Finding Protobuf library:
+
+.. code-block:: cmake
+
+  find_package(Protobuf)
+
+Or, finding Protobuf and specifying a minimum required version:
+
+.. code-block:: cmake
+
+  find_package(Protobuf 30)
+
+Or, finding Protobuf and making it required (if not found, processing stops
+with an error message):
 
 .. code-block:: cmake
 
   find_package(Protobuf REQUIRED)
-  include_directories(${Protobuf_INCLUDE_DIRS})
-  include_directories(${CMAKE_CURRENT_BINARY_DIR})
-  protobuf_generate_cpp(PROTO_SRCS PROTO_HDRS foo.proto)
-  protobuf_generate_cpp(PROTO_SRCS PROTO_HDRS EXPORT_MACRO DLL_EXPORT foo.proto)
-  protobuf_generate_cpp(PROTO_SRCS PROTO_HDRS DESCRIPTORS PROTO_DESCS foo.proto)
-  protobuf_generate_python(PROTO_PY foo.proto)
-  add_executable(bar bar.cc ${PROTO_SRCS} ${PROTO_HDRS})
-  target_link_libraries(bar ${Protobuf_LIBRARIES})
 
-.. note::
-  The ``protobuf_generate_cpp`` and ``protobuf_generate_python``
-  functions and :command:`add_executable` or :command:`add_library`
-  calls only work properly within the same directory.
+Example: Finding Protobuf in Config Mode
+""""""""""""""""""""""""""""""""""""""""
 
-.. command:: protobuf_generate_cpp
+When Protobuf library is built and installed using its CMake-based build
+system, it can be found in *config mode*:
 
-  Add custom commands to process ``.proto`` files to C++::
+.. code-block:: cmake
 
-    protobuf_generate_cpp (<SRCS> <HDRS>
-        [DESCRIPTORS <DESC>] [EXPORT_MACRO <MACRO>] [<ARGN>...])
+  find_package(Protobuf CONFIG)
 
-  ``SRCS``
-    Variable to define with autogenerated source files
-  ``HDRS``
-    Variable to define with autogenerated header files
-  ``DESCRIPTORS``
-    .. versionadded:: 3.10
-      Variable to define with autogenerated descriptor files, if requested.
-  ``EXPORT_MACRO``
-    is a macro which should expand to ``__declspec(dllexport)`` or
-    ``__declspec(dllimport)`` depending on what is being compiled.
-  ``ARGN``
-    ``.proto`` files
+However, some Protobuf installations might still not provide package
+configuration file.  The following example shows, how to use the
+:variable:`CMAKE_FIND_PACKAGE_PREFER_CONFIG` variable to find Protobuf in
+*config mode* and falling back to *module mode* if config file is not found:
 
-.. command:: protobuf_generate_python
+.. code-block:: cmake
 
-  .. versionadded:: 3.4
+  set(CMAKE_FIND_PACKAGE_PREFER_CONFIG TRUE)
+  find_package(Protobuf)
+  unset(CMAKE_FIND_PACKAGE_PREFER_CONFIG)
 
-  Add custom commands to process ``.proto`` files to Python::
+Example: Using Protobuf
+"""""""""""""""""""""""
 
-    protobuf_generate_python (<PY> [<ARGN>...])
+Finding Protobuf and linking its imported library target to a project target:
 
-  ``PY``
-    Variable to define with autogenerated Python files
-  ``ARGN``
-    ``.proto`` files
+.. code-block:: cmake
+
+  find_package(Protobuf)
+  target_link_libraries(example PRIVATE protobuf::libprotobuf)
+
+Example: Processing Proto Schema Files
+""""""""""""""""""""""""""""""""""""""
+
+The following example demonstrates how to process all ``*.proto`` schema
+source files added to a target into C++ source files:
+
+.. code-block:: cmake
+  :caption: ``CMakeLists.txt``
+
+  cmake_minimum_required(VERSION 3.24)
+  project(ProtobufExample)
+
+  add_executable(example main.cxx person.proto)
+
+  find_package(Protobuf)
+
+  if(Protobuf_FOUND)
+    protobuf_generate(TARGET example)
+  endif()
+
+  target_link_libraries(example PRIVATE protobuf::libprotobuf)
+  target_include_directories(example PRIVATE ${CMAKE_CURRENT_BINARY_DIR})
+
+.. code-block:: proto
+  :caption: ``person.proto``
+
+  syntax = "proto3";
+
+  message Person {
+    string name = 1;
+    int32 id = 2;
+  }
+
+.. code-block:: c++
+  :caption: ``main.cxx``
+
+  #include <iostream>
+  #include "person.pb.h"
+
+  int main()
+  {
+    Person person;
+    person.set_name("Alice");
+    person.set_id(123);
+
+    std::cout << "Name: " << person.name() << "\n";
+    std::cout << "ID: " << person.id() << "\n";
+
+    return 0;
+  }
+
+Example: Using Protobuf and gRPC
+""""""""""""""""""""""""""""""""
+
+The following example shows how to use Protobuf and gRPC:
+
+.. code-block:: cmake
+  :caption: ``CMakeLists.txt``
+
+  find_package(Protobuf REQUIRED)
+  find_package(gRPC CONFIG REQUIRED)
+
+  add_library(ProtoExample Example.proto)
+  target_link_libraries(ProtoExample PUBLIC gRPC::grpc++)
+
+  protobuf_generate(TARGET ProtoExample)
+  protobuf_generate(
+    TARGET ProtoExample
+    LANGUAGE grpc
+    PLUGIN protoc-gen-grpc=$<TARGET_FILE:gRPC::grpc_cpp_plugin>
+    PLUGIN_OPTIONS generate_mock_code=true
+    GENERATE_EXTENSIONS .grpc.pb.h .grpc.pb.cc
+  )
+
+Examples: Upgrading Deprecated Commands
+"""""""""""""""""""""""""""""""""""""""
+
+The following example shows how to process ``.proto`` files to C++ code,
+using a deprecated command and its modern replacement:
+
+.. code-block:: cmake
+  :caption: ``CMakeLists.txt`` with deprecated command
+
+  find_package(Protobuf)
+
+  if(Protobuf_FOUND)
+    protobuf_generate_cpp(
+      proto_sources
+      proto_headers
+      EXPORT_MACRO DLL_EXPORT
+      DESCRIPTORS proto_descriptors
+      src/protocol/Proto1.proto
+      src/protocol/Proto2.proto
+    )
+  endif()
+
+  target_sources(
+    example
+    PRIVATE ${proto_sources} ${proto_headers} ${proto_descriptors}
+  )
+  target_link_libraries(example PRIVATE protobuf::libprotobuf)
+
+.. code-block:: cmake
+  :caption: ``CMakeLists.txt`` with upgraded code
+
+  find_package(Protobuf)
+
+  if(Protobuf_FOUND)
+    protobuf_generate(
+      TARGET example
+      EXPORT_MACRO DLL_EXPORT
+      IMPORT_DIRS src/protocol
+      DESCRIPTORS
+      PROTOS
+        src/protocol/Proto1.proto
+        src/protocol/Proto2.proto
+    )
+  endif()
+
+  target_link_libraries(example PRIVATE protobuf::libprotobuf)
+
+The following example shows how to process ``.proto`` files to Python code,
+using a deprecated command and its modern replacement:
+
+.. code-block:: cmake
+  :caption: ``CMakeLists.txt`` with deprecated command
+
+  find_package(Protobuf)
+
+  if(Protobuf_FOUND)
+    protobuf_generate_python(python_sources foo.proto)
+  endif()
+
+  add_custom_target(proto_files DEPENDS ${python_sources})
+
+.. code-block:: cmake
+  :caption: ``CMakeLists.txt`` with upgraded code
+
+  find_package(Protobuf)
+
+  if(Protobuf_FOUND)
+    protobuf_generate(
+      LANGUAGE python
+      PROTOS foo.proto
+      OUT_VAR python_sources
+    )
+  endif()
+
+  add_custom_target(proto_files DEPENDS ${python_sources})
 #]=======================================================================]
+
+cmake_policy(PUSH)
+cmake_policy(SET CMP0159 NEW) # file(STRINGS) with REGEX updates CMAKE_MATCH_<n>
 
 function(protobuf_generate)
   set(_options APPEND_PATH DESCRIPTORS)
-  set(_singleargs LANGUAGE OUT_VAR EXPORT_MACRO PROTOC_OUT_DIR PLUGIN)
+  set(_singleargs LANGUAGE OUT_VAR EXPORT_MACRO PROTOC_OUT_DIR PLUGIN PLUGIN_OPTIONS PROTOC_EXE)
   if(COMMAND target_sources)
     list(APPEND _singleargs TARGET)
   endif()
-  set(_multiargs PROTOS IMPORT_DIRS GENERATE_EXTENSIONS)
+  set(_multiargs PROTOS IMPORT_DIRS GENERATE_EXTENSIONS PROTOC_OPTIONS DEPENDENCIES)
 
   cmake_parse_arguments(protobuf_generate "${_options}" "${_singleargs}" "${_multiargs}" "${ARGN}")
 
@@ -168,8 +607,17 @@ function(protobuf_generate)
   endif()
 
   if(protobuf_generate_EXPORT_MACRO AND protobuf_generate_LANGUAGE STREQUAL cpp)
-    set(_dll_export_decl "dllexport_decl=${protobuf_generate_EXPORT_MACRO}:")
+    set(_dll_export_decl "dllexport_decl=${protobuf_generate_EXPORT_MACRO}")
   endif()
+
+  foreach(_option ${_dll_export_decl} ${protobuf_generate_PLUGIN_OPTIONS})
+    # append comma - not using CMake lists and string replacement as users
+    # might have semicolons in options
+    if(_plugin_options)
+      set( _plugin_options "${_plugin_options},")
+    endif()
+    set(_plugin_options "${_plugin_options}${_option}")
+  endforeach()
 
   if(protobuf_generate_PLUGIN)
     set(_plugin "--plugin=${protobuf_generate_PLUGIN}")
@@ -200,18 +648,26 @@ function(protobuf_generate)
     return()
   endif()
 
+  if(NOT protobuf_generate_PROTOC_EXE)
+    if(NOT TARGET protobuf::protoc)
+      message(SEND_ERROR "protoc executable not found. "
+        "Please define the Protobuf_PROTOC_EXECUTABLE variable, or pass PROTOC_EXE to protobuf_generate, or ensure that protoc is in CMake's search path.")
+      return()
+    endif()
+    # Default to using the CMake executable
+    set(protobuf_generate_PROTOC_EXE protobuf::protoc)
+  endif()
+
   if(protobuf_generate_APPEND_PATH)
     # Create an include path for each file specified
     foreach(_file ${protobuf_generate_PROTOS})
       get_filename_component(_abs_file ${_file} ABSOLUTE)
-      get_filename_component(_abs_path ${_abs_file} PATH)
-      list(FIND _protobuf_include_path ${_abs_path} _contains_already)
+      get_filename_component(_abs_dir ${_abs_file} DIRECTORY)
+      list(FIND _protobuf_include_path ${_abs_dir} _contains_already)
       if(${_contains_already} EQUAL -1)
-          list(APPEND _protobuf_include_path -I ${_abs_path})
+          list(APPEND _protobuf_include_path -I ${_abs_dir})
       endif()
     endforeach()
-  else()
-    set(_protobuf_include_path -I ${CMAKE_CURRENT_SOURCE_DIR})
   endif()
 
   foreach(DIR ${protobuf_generate_IMPORT_DIRS})
@@ -222,6 +678,10 @@ function(protobuf_generate)
     endif()
   endforeach()
 
+  if(NOT protobuf_generate_APPEND_PATH)
+    list(APPEND _protobuf_include_path -I ${CMAKE_CURRENT_SOURCE_DIR})
+  endif()
+
   set(_generated_srcs_all)
   foreach(_proto ${protobuf_generate_PROTOS})
     get_filename_component(_abs_file ${_proto} ABSOLUTE)
@@ -231,7 +691,19 @@ function(protobuf_generate)
 
     set(_possible_rel_dir)
     if (NOT protobuf_generate_APPEND_PATH)
-        set(_possible_rel_dir ${_rel_dir}/)
+      foreach(DIR ${_protobuf_include_path})
+        if(NOT DIR STREQUAL "-I")
+          file(RELATIVE_PATH _rel_dir ${DIR} ${_abs_dir})
+          if(_rel_dir STREQUAL _abs_dir)
+            continue()
+          endif()
+          string(FIND "${_rel_dir}" "../" _is_in_parent_folder)
+          if (NOT ${_is_in_parent_folder} EQUAL 0)
+            break()
+          endif()
+        endif()
+      endforeach()
+      set(_possible_rel_dir ${_rel_dir}/)
     endif()
 
     set(_generated_srcs)
@@ -246,12 +718,20 @@ function(protobuf_generate)
     endif()
     list(APPEND _generated_srcs_all ${_generated_srcs})
 
+    set(_comment "Running ${protobuf_generate_LANGUAGE} protocol buffer compiler on ${_proto}")
+    if(protobuf_generate_PROTOC_OPTIONS)
+      set(_comment "${_comment}, protoc-options: ${protobuf_generate_PROTOC_OPTIONS}")
+    endif()
+    if(_plugin_options)
+      set(_comment "${_comment}, plugin-options: ${_plugin_options}")
+    endif()
+
     add_custom_command(
       OUTPUT ${_generated_srcs}
-      COMMAND  protobuf::protoc
-      ARGS --${protobuf_generate_LANGUAGE}_out ${_dll_export_decl}${protobuf_generate_PROTOC_OUT_DIR} ${_plugin} ${_dll_desc_out} ${_protobuf_include_path} ${_abs_file}
-      DEPENDS ${_abs_file} protobuf::protoc
-      COMMENT "Running ${protobuf_generate_LANGUAGE} protocol buffer compiler on ${_proto}"
+      COMMAND ${protobuf_generate_PROTOC_EXE}
+      ARGS ${protobuf_generate_PROTOC_OPTIONS} --${protobuf_generate_LANGUAGE}_out ${_plugin_options}:${protobuf_generate_PROTOC_OUT_DIR} ${_plugin} ${_dll_desc_out} ${_protobuf_include_path} ${_abs_file}
+      DEPENDS ${_abs_file} protobuf::protoc ${protobuf_generate_DEPENDENCIES}
+      COMMENT ${_comment}
       VERBATIM )
   endforeach()
 
@@ -648,8 +1128,8 @@ if(Protobuf_INCLUDE_DIR)
   endif()
 endif()
 
-include(${CMAKE_CURRENT_LIST_DIR}/FindPackageHandleStandardArgs.cmake)
-FIND_PACKAGE_HANDLE_STANDARD_ARGS(Protobuf
+include(FindPackageHandleStandardArgs)
+find_package_handle_standard_args(Protobuf
     REQUIRED_VARS Protobuf_LIBRARIES Protobuf_INCLUDE_DIR
     VERSION_VAR Protobuf_VERSION
 )
@@ -685,3 +1165,5 @@ foreach(Camel
     string(TOUPPER ${Camel} UPPER)
     set(${UPPER} ${${Camel}})
 endforeach()
+
+cmake_policy(POP)

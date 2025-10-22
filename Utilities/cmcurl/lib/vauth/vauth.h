@@ -26,11 +26,11 @@
 
 #include <curl/curl.h>
 
-#include "bufref.h"
+#include "../bufref.h"
 
 struct Curl_easy;
 
-#if !defined(CURL_DISABLE_CRYPTO_AUTH)
+#if !defined(CURL_DISABLE_DIGEST_AUTH)
 struct digestdata;
 #endif
 
@@ -60,7 +60,7 @@ struct gsasldata;
  */
 bool Curl_auth_allowed_to_host(struct Curl_easy *data);
 
-/* This is used to build a SPN string */
+/* This is used to build an SPN string */
 #if !defined(USE_WINDOWS_SSPI)
 char *Curl_auth_build_spn(const char *service, const char *host,
                           const char *realm);
@@ -79,14 +79,12 @@ CURLcode Curl_auth_create_plain_message(const char *authzid,
                                         struct bufref *out);
 
 /* This is used to generate a LOGIN cleartext message */
-CURLcode Curl_auth_create_login_message(const char *value,
-                                        struct bufref *out);
+void Curl_auth_create_login_message(const char *value, struct bufref *out);
 
 /* This is used to generate an EXTERNAL cleartext message */
-CURLcode Curl_auth_create_external_message(const char *user,
-                                           struct bufref *out);
+void Curl_auth_create_external_message(const char *user, struct bufref *out);
 
-#if !defined(CURL_DISABLE_CRYPTO_AUTH)
+#ifndef CURL_DISABLE_DIGEST_AUTH
 /* This is used to generate a CRAM-MD5 response message */
 CURLcode Curl_auth_create_cram_md5_message(const struct bufref *chlg,
                                            const char *userp,
@@ -119,7 +117,7 @@ CURLcode Curl_auth_create_digest_http_message(struct Curl_easy *data,
 
 /* This is used to clean up the digest specific data */
 void Curl_auth_digest_cleanup(struct digestdata *digest);
-#endif /* !CURL_DISABLE_CRYPTO_AUTH */
+#endif /* !CURL_DISABLE_DIGEST_AUTH */
 
 #ifdef USE_GSASL
 /* This is used to evaluate if MECH is supported by gsasl */
@@ -169,6 +167,8 @@ CURLcode Curl_auth_create_ntlm_type3_message(struct Curl_easy *data,
 
 /* This is used to clean up the NTLM specific data */
 void Curl_auth_cleanup_ntlm(struct ntlmdata *ntlm);
+#else
+#define Curl_auth_is_ntlm_supported()     FALSE
 #endif /* USE_NTLM */
 
 /* This is used to generate a base64 encoded OAuth 2.0 message */
@@ -209,6 +209,8 @@ CURLcode Curl_auth_create_gssapi_security_message(struct Curl_easy *data,
 
 /* This is used to clean up the GSSAPI specific data */
 void Curl_auth_cleanup_gssapi(struct kerberos5data *krb5);
+#else
+#define Curl_auth_is_gssapi_supported()       FALSE
 #endif /* USE_KERBEROS5 */
 
 #if defined(USE_SPNEGO)

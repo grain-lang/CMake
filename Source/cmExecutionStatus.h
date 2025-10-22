@@ -1,11 +1,13 @@
 /* Distributed under the OSI-approved BSD 3-Clause License.  See accompanying
-   file Copyright.txt or https://cmake.org/licensing for details.  */
+   file LICENSE.rst or https://cmake.org/licensing for details.  */
 #pragma once
 
 #include <cmConfigure.h> // IWYU pragma: keep
 
 #include <string>
 #include <vector>
+
+#include <cm/optional>
 
 class cmMakefile;
 
@@ -39,7 +41,7 @@ public:
     this->ReturnInvoked = true;
   }
   bool GetReturnInvoked() const { return this->ReturnInvoked; }
-  const std::vector<std::string>& GetReturnVariables() const
+  std::vector<std::string> const& GetReturnVariables() const
   {
     return this->Variables;
   }
@@ -53,6 +55,11 @@ public:
   void SetNestedError() { this->NestedError = true; }
   bool GetNestedError() const { return this->NestedError; }
 
+  void SetExitCode(int code) noexcept { this->ExitCode = code; }
+  bool HasExitCode() const noexcept { return this->ExitCode.has_value(); }
+  void CleanExitCode() noexcept { this->ExitCode.reset(); }
+  int GetExitCode() const noexcept { return this->ExitCode.value_or(-1); }
+
 private:
   cmMakefile& Makefile;
   std::string Error;
@@ -60,5 +67,6 @@ private:
   bool BreakInvoked = false;
   bool ContinueInvoked = false;
   bool NestedError = false;
+  cm::optional<int> ExitCode;
   std::vector<std::string> Variables;
 };

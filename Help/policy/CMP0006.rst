@@ -1,6 +1,9 @@
 CMP0006
 -------
 
+.. |REMOVED_IN_CMAKE_VERSION| replace:: 4.0
+.. include:: include/REMOVED_PROLOGUE.rst
+
 Installing :prop_tgt:`MACOSX_BUNDLE` targets requires a ``BUNDLE DESTINATION``.
 
 This policy determines whether the :command:`install(TARGETS)` command must be
@@ -17,8 +20,6 @@ The ``OLD`` behavior for this policy is to fall back to the
 behavior for this policy is to produce an error if a bundle target is installed
 without a ``BUNDLE DESTINATION``.
 
-This policy was introduced in CMake version 2.6.0.  CMake version
-|release| warns when the policy is not set and uses ``OLD`` behavior.  Use
-the :command:`cmake_policy` command to set it to ``OLD`` or ``NEW`` explicitly.
-
-.. include:: DEPRECATED.txt
+.. |INTRODUCED_IN_CMAKE_VERSION| replace:: 2.6.0
+.. |WARNED_OR_DID_NOT_WARN| replace:: warned
+.. include:: include/REMOVED_EPILOGUE.rst

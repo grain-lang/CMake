@@ -1,6 +1,9 @@
 CMP0017
 -------
 
+.. |REMOVED_IN_CMAKE_VERSION| replace:: 4.0
+.. include:: include/REMOVED_PROLOGUE.rst
+
 Prefer files from the CMake module directory when including from there.
 
 Starting with CMake 2.8.4, if a cmake-module shipped with CMake (i.e.
@@ -14,8 +17,6 @@ precedence over the ones in the CMake module directory.  The ``OLD``
 behavior is to always prefer files from CMAKE_MODULE_PATH over files
 from the CMake modules directory.
 
-This policy was introduced in CMake version 2.8.4.  CMake version
-|release| warns when the policy is not set and uses ``OLD`` behavior.  Use
-the :command:`cmake_policy` command to set it to ``OLD`` or ``NEW`` explicitly.
-
-.. include:: DEPRECATED.txt
+.. |INTRODUCED_IN_CMAKE_VERSION| replace:: 2.8.4
+.. |WARNED_OR_DID_NOT_WARN| replace:: warned
+.. include:: include/REMOVED_EPILOGUE.rst

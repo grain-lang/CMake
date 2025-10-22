@@ -1,6 +1,9 @@
 CMP0056
 -------
 
+.. |REMOVED_IN_CMAKE_VERSION| replace:: 4.0
+.. include:: include/REMOVED_PROLOGUE.rst
+
 .. versionadded:: 3.2
 
 Honor link flags in :command:`try_compile` source-file signature.
@@ -27,10 +30,10 @@ set it on the command line by defining the
 :variable:`CMAKE_POLICY_DEFAULT_CMP0056 <CMAKE_POLICY_DEFAULT_CMP<NNNN>>`
 variable in the cache.
 
-This policy was introduced in CMake version 3.2.  Unlike most policies,
-CMake version |release| does *not* warn by default when this policy
-is not set and simply uses ``OLD`` behavior.  See documentation of the
-:variable:`CMAKE_POLICY_WARNING_CMP0056 <CMAKE_POLICY_WARNING_CMP<NNNN>>`
-variable to control the warning.
+.. |INTRODUCED_IN_CMAKE_VERSION| replace:: 3.2
+.. |WARNED_OR_DID_NOT_WARN| replace:: did *not* warn by default
+.. include:: include/REMOVED_EPILOGUE.rst
 
-.. include:: DEPRECATED.txt
+See documentation of the
+:variable:`CMAKE_POLICY_WARNING_CMP0056 <CMAKE_POLICY_WARNING_CMP<NNNN>>`
+variable to control the warning in CMake versions before 4.0.

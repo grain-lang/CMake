@@ -1,8 +1,11 @@
 /* Distributed under the OSI-approved BSD 3-Clause License.  See accompanying
-   file Copyright.txt or https://cmake.org/licensing for details.  */
+   file LICENSE.rst or https://cmake.org/licensing for details.  */
 #include "cmGlobalWatcomWMakeGenerator.h"
 
 #include <ostream>
+
+#include <cm/string_view>
+#include <cmext/string_view>
 
 #include "cmGlobalGenerator.h"
 #include "cmMakefile.h"
@@ -46,7 +49,7 @@ void cmGlobalWatcomWMakeGenerator::EnableLanguage(
 bool cmGlobalWatcomWMakeGenerator::SetSystemName(std::string const& s,
                                                  cmMakefile* mf)
 {
-  if (mf->GetSafeDefinition("CMAKE_SYSTEM_PROCESSOR") == "I86") {
+  if (mf->GetSafeDefinition("CMAKE_SYSTEM_PROCESSOR") == "I86"_s) {
     mf->AddDefinition("CMAKE_GENERATOR_CC", "wcl");
     mf->AddDefinition("CMAKE_GENERATOR_CXX", "wcl");
   }
@@ -61,10 +64,10 @@ cmDocumentationEntry cmGlobalWatcomWMakeGenerator::GetDocumentation()
 
 std::vector<cmGlobalGenerator::GeneratedMakeCommand>
 cmGlobalWatcomWMakeGenerator::GenerateBuildCommand(
-  const std::string& makeProgram, const std::string& projectName,
-  const std::string& projectDir, std::vector<std::string> const& targetNames,
-  const std::string& config, int /*jobs*/, bool verbose,
-  const cmBuildOptions& buildOptions,
+  std::string const& makeProgram, std::string const& projectName,
+  std::string const& projectDir, std::vector<std::string> const& targetNames,
+  std::string const& config, int /*jobs*/, bool verbose,
+  cmBuildOptions const& buildOptions,
   std::vector<std::string> const& makeOptions)
 {
   return this->cmGlobalUnixMakefileGenerator3::GenerateBuildCommand(

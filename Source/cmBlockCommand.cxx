@@ -1,9 +1,10 @@
 /* Distributed under the OSI-approved BSD 3-Clause License.  See accompanying
-   file Copyright.txt or https://cmake.org/licensing for details.  */
+   file LICENSE.rst or https://cmake.org/licensing for details.  */
 
 #include "cmBlockCommand.h"
 
-#include <cstdint> // IWYU pragma: keep
+#include <cstdint>
+#include <initializer_list>
 #include <utility>
 
 #include <cm/memory>
@@ -32,18 +33,18 @@ using ScopeSet = cm::enum_set<ScopeType>;
 class BlockScopePushPop
 {
 public:
-  BlockScopePushPop(cmMakefile* m, const ScopeSet& scopes);
+  BlockScopePushPop(cmMakefile* m, ScopeSet const& scopes);
   ~BlockScopePushPop() = default;
 
-  BlockScopePushPop(const BlockScopePushPop&) = delete;
-  BlockScopePushPop& operator=(const BlockScopePushPop&) = delete;
+  BlockScopePushPop(BlockScopePushPop const&) = delete;
+  BlockScopePushPop& operator=(BlockScopePushPop const&) = delete;
 
 private:
   std::unique_ptr<cmMakefile::PolicyPushPop> PolicyScope;
   std::unique_ptr<cmMakefile::VariablePushPop> VariableScope;
 };
 
-BlockScopePushPop::BlockScopePushPop(cmMakefile* mf, const ScopeSet& scopes)
+BlockScopePushPop::BlockScopePushPop(cmMakefile* mf, ScopeSet const& scopes)
 {
   if (scopes.contains(ScopeType::POLICIES)) {
     this->PolicyScope = cm::make_unique<cmMakefile::PolicyPushPop>(mf);
@@ -56,7 +57,7 @@ BlockScopePushPop::BlockScopePushPop(cmMakefile* mf, const ScopeSet& scopes)
 class cmBlockFunctionBlocker : public cmFunctionBlocker
 {
 public:
-  cmBlockFunctionBlocker(cmMakefile* mf, const ScopeSet& scopes,
+  cmBlockFunctionBlocker(cmMakefile* mf, ScopeSet const& scopes,
                          std::vector<std::string> variableNames);
   ~cmBlockFunctionBlocker() override;
 
@@ -79,7 +80,7 @@ private:
 };
 
 cmBlockFunctionBlocker::cmBlockFunctionBlocker(
-  cmMakefile* const mf, const ScopeSet& scopes,
+  cmMakefile* const mf, ScopeSet const& scopes,
   std::vector<std::string> variableNames)
   : Makefile{ mf }
   , Scopes{ scopes }
@@ -124,6 +125,10 @@ bool cmBlockFunctionBlocker::Replay(std::vector<cmListFileFunction> functions,
     }
     if (status.GetContinueInvoked()) {
       inStatus.SetContinueInvoked();
+      return true;
+    }
+    if (status.HasExitCode()) {
+      inStatus.SetExitCode(status.GetExitCode());
       return true;
     }
     if (cmSystemTools::GetFatalErrorOccurred()) {

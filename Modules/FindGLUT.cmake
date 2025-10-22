@@ -1,21 +1,22 @@
 # Distributed under the OSI-approved BSD 3-Clause License.  See accompanying
-# file Copyright.txt or https://cmake.org/licensing for details.
+# file LICENSE.rst or https://cmake.org/licensing for details.
 
 #[=======================================================================[.rst:
 FindGLUT
 --------
 
-Find OpenGL Utility Toolkit (GLUT) library and include files.
+Finds the OpenGL Utility Toolkit (GLUT) library, which provides a simple API for
+creating windows, handling input, and managing events in OpenGL applications.
 
-IMPORTED Targets
+Imported Targets
 ^^^^^^^^^^^^^^^^
 
-.. versionadded:: 3.1
-
-This module defines the :prop_tgt:`IMPORTED` targets:
+This module provides the following :ref:`Imported Targets`:
 
 ``GLUT::GLUT``
- Defined if the system has GLUT.
+  .. versionadded:: 3.1
+
+  Target encapsulating the GLUT usage requirements, available if GLUT is found.
 
 Result Variables
 ^^^^^^^^^^^^^^^^
@@ -23,49 +24,52 @@ Result Variables
 This module defines the following variables:
 
 ``GLUT_FOUND``
-  True if ``glut`` was found.
+  Boolean indicating whether GLUT is found.
 
 ``GLUT_INCLUDE_DIRS``
   .. versionadded:: 3.23
 
-  Where to find GL/glut.h, etc.
+  Include directories needed to use GLUT.  Starting with CMake 3.23, this
+  variable is intended to be used in target usage requirements instead of the
+  cache variable ``GLUT_INCLUDE_DIR``, which is intended for finding GLUT.
 
 ``GLUT_LIBRARIES``
-  List of libraries for using ``glut``.
+  List of libraries needed to link against for using GLUT.
 
 Cache Variables
 ^^^^^^^^^^^^^^^
 
-This module may set the following variables depending on platform.
+This module may set the following cache variables depending on platform.
 These variables may optionally be set to help this module find the
-correct files, but clients should not use these as results:
+correct files, but should not be used as result variables:
 
 ``GLUT_INCLUDE_DIR``
-  The full path to the directory containing ``GL/glut.h``,
-  not including ``GL/``.
+  The full path to the directory containing ``GL/glut.h`` (without the ``GL/``).
 
 ``GLUT_glut_LIBRARY``
-  The full path to the glut library.
-
-``GLUT_Xmu_LIBRARY``
-  The full path to the Xmu library.
+  The full path to the ``glut`` library.
 
 ``GLUT_Xi_LIBRARY``
-  The full path to the Xi Library.
+  The full path to the dependent ``Xi`` (X Input Device Extension) library on
+  some systems.
 
-Obsolete Variables
-^^^^^^^^^^^^^^^^^^
+``GLUT_Xmu_LIBRARY``
+  The full path to the dependent ``Xmu`` (X Miscellaneous Utilities) library on
+  some systems.
 
-The following variables may also be provided, for backwards compatibility:
+Examples
+^^^^^^^^
 
-``GLUT_INCLUDE_DIR``
-  This is one of above `Cache Variables`_, but prior to CMake 3.23 was
-  also a result variable.  Prefer to use ``GLUT_INCLUDE_DIRS`` instead
-  in CMake 3.23 and above.
+Finding GLUT and linking it to a project target:
+
+.. code-block:: cmake
+
+  find_package(GLUT)
+  target_link_libraries(project_target PRIVATE GLUT::GLUT)
 #]=======================================================================]
 
 include(${CMAKE_CURRENT_LIST_DIR}/SelectLibraryConfigurations.cmake)
-include(${CMAKE_CURRENT_LIST_DIR}/FindPackageHandleStandardArgs.cmake)
+include(FindPackageHandleStandardArgs)
 
 find_package(PkgConfig QUIET)
 if(PKG_CONFIG_FOUND)
@@ -107,18 +111,8 @@ elseif(APPLE)
 
   if(GLUT_cocoa_LIBRARY AND NOT TARGET GLUT::Cocoa)
     add_library(GLUT::Cocoa UNKNOWN IMPORTED)
-    # Cocoa should always be a Framework, but we check to make sure.
-    if(GLUT_cocoa_LIBRARY MATCHES "/([^/]+)\\.framework$")
-      set(_glut_cocoa "${GLUT_cocoa_LIBRARY}/${CMAKE_MATCH_1}")
-      if(EXISTS "${_glut_cocoa}.tbd")
-        string(APPEND _glut_cocoa ".tbd")
-      endif()
-      set_target_properties(GLUT::Cocoa PROPERTIES
-        IMPORTED_LOCATION "${_glut_cocoa}")
-    else()
-      set_target_properties(GLUT::Cocoa PROPERTIES
-        IMPORTED_LOCATION "${GLUT_cocoa_LIBRARY}")
-    endif()
+    set_target_properties(GLUT::Cocoa PROPERTIES
+      IMPORTED_LOCATION "${GLUT_cocoa_LIBRARY}")
   endif()
 else()
   if(BEOS)
@@ -175,7 +169,7 @@ else()
   unset(_GLUT_glut_LIB_DIR)
 endif()
 
-FIND_PACKAGE_HANDLE_STANDARD_ARGS(GLUT REQUIRED_VARS GLUT_glut_LIBRARY GLUT_INCLUDE_DIR)
+find_package_handle_standard_args(GLUT REQUIRED_VARS GLUT_glut_LIBRARY GLUT_INCLUDE_DIR)
 
 if (GLUT_FOUND)
   # Is -lXi and -lXmu required on all platforms that have it?
@@ -196,32 +190,23 @@ if (GLUT_FOUND)
     add_library(GLUT::GLUT UNKNOWN IMPORTED)
     set_target_properties(GLUT::GLUT PROPERTIES
       INTERFACE_INCLUDE_DIRECTORIES "${GLUT_INCLUDE_DIRS}")
-    if(GLUT_glut_LIBRARY MATCHES "/([^/]+)\\.framework$")
-      set(_glut_glut "${GLUT_glut_LIBRARY}/${CMAKE_MATCH_1}")
-      if(EXISTS "${_glut_glut}.tbd")
-        string(APPEND _glut_glut ".tbd")
-      endif()
+    if(GLUT_glut_LIBRARY_RELEASE)
+      set_property(TARGET GLUT::GLUT APPEND PROPERTY
+        IMPORTED_CONFIGURATIONS RELEASE)
       set_target_properties(GLUT::GLUT PROPERTIES
-        IMPORTED_LOCATION "${_glut_glut}")
-    else()
-      if(GLUT_glut_LIBRARY_RELEASE)
-        set_property(TARGET GLUT::GLUT APPEND PROPERTY
-          IMPORTED_CONFIGURATIONS RELEASE)
-        set_target_properties(GLUT::GLUT PROPERTIES
-          IMPORTED_LOCATION_RELEASE "${GLUT_glut_LIBRARY_RELEASE}")
-      endif()
+        IMPORTED_LOCATION_RELEASE "${GLUT_glut_LIBRARY_RELEASE}")
+    endif()
 
-      if(GLUT_glut_LIBRARY_DEBUG)
-        set_property(TARGET GLUT::GLUT APPEND PROPERTY
-          IMPORTED_CONFIGURATIONS DEBUG)
-        set_target_properties(GLUT::GLUT PROPERTIES
-          IMPORTED_LOCATION_DEBUG "${GLUT_glut_LIBRARY_DEBUG}")
-      endif()
+    if(GLUT_glut_LIBRARY_DEBUG)
+      set_property(TARGET GLUT::GLUT APPEND PROPERTY
+        IMPORTED_CONFIGURATIONS DEBUG)
+      set_target_properties(GLUT::GLUT PROPERTIES
+        IMPORTED_LOCATION_DEBUG "${GLUT_glut_LIBRARY_DEBUG}")
+    endif()
 
-      if(NOT GLUT_glut_LIBRARY_RELEASE AND NOT GLUT_glut_LIBRARY_DEBUG)
-        set_property(TARGET GLUT::GLUT APPEND PROPERTY
-          IMPORTED_LOCATION "${GLUT_glut_LIBRARY}")
-      endif()
+    if(NOT GLUT_glut_LIBRARY_RELEASE AND NOT GLUT_glut_LIBRARY_DEBUG)
+      set_property(TARGET GLUT::GLUT APPEND PROPERTY
+        IMPORTED_LOCATION "${GLUT_glut_LIBRARY}")
     endif()
 
     if(TARGET GLUT::Xmu)

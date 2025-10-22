@@ -1,8 +1,9 @@
 /* Distributed under the OSI-approved BSD 3-Clause License.  See accompanying
-   file Copyright.txt or https://cmake.org/licensing for details.  */
+   file LICENSE.rst or https://cmake.org/licensing for details.  */
 #include "cmSetCommand.h"
 
 #include "cmExecutionStatus.h"
+#include "cmList.h"
 #include "cmMakefile.h"
 #include "cmMessageType.h"
 #include "cmRange.h"
@@ -30,7 +31,7 @@ bool cmSetCommand(std::vector<std::string> const& args,
 
     // what is the current value if any
     std::string currValue;
-    const bool currValueSet = cmSystemTools::GetEnv(varName, currValue);
+    bool const currValueSet = cmSystemTools::GetEnv(varName, currValue);
 
     // will it be set to something, then set it
     if (args.size() > 1 && !args[1].empty()) {
@@ -103,7 +104,8 @@ bool cmSetCommand(std::vector<std::string> const& args,
   }
 
   // collect any values into a single semi-colon separated value list
-  value = cmJoin(cmMakeRange(args).advance(1).retreat(ignoreLastArgs), ";");
+  value =
+    cmList::to_string(cmMakeRange(args).advance(1).retreat(ignoreLastArgs));
 
   if (parentScope) {
     status.GetMakefile().RaiseScope(variable, value.c_str());
@@ -113,10 +115,18 @@ bool cmSetCommand(std::vector<std::string> const& args,
   // we should be nice and try to catch some simple screwups if the last or
   // next to last args are CACHE then they screwed up.  If they used FORCE
   // without CACHE they screwed up
-  if ((args.back() == "CACHE") ||
-      (args.size() > 1 && args[args.size() - 2] == "CACHE") ||
-      (force && !cache)) {
-    status.SetError("given invalid arguments for CACHE mode.");
+  if (args.back() == "CACHE") {
+    status.SetError(
+      "given invalid arguments for CACHE mode: missing type and docstring");
+    return false;
+  }
+  if (args.size() > 1 && args[args.size() - 2] == "CACHE") {
+    status.SetError(
+      "given invalid arguments for CACHE mode: missing type or docstring");
+    return false;
+  }
+  if (force && !cache) {
+    status.SetError("given invalid arguments: FORCE specified without CACHE");
     return false;
   }
 

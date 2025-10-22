@@ -1,5 +1,5 @@
 /* Distributed under the OSI-approved BSD 3-Clause License.  See accompanying
-   file Copyright.txt or https://cmake.org/licensing for details.  */
+   file LICENSE.rst or https://cmake.org/licensing for details.  */
 #include "cmAddCustomTargetCommand.h"
 
 #include <utility>
@@ -13,10 +13,10 @@
 #include "cmGlobalGenerator.h"
 #include "cmMakefile.h"
 #include "cmMessageType.h"
-#include "cmStateTypes.h"
 #include "cmStringAlgorithms.h"
 #include "cmSystemTools.h"
 #include "cmTarget.h"
+#include "cmValue.h"
 
 bool cmAddCustomTargetCommand(std::vector<std::string> const& args,
                               cmExecutionStatus& status)
@@ -51,9 +51,10 @@ bool cmAddCustomTargetCommand(std::vector<std::string> const& args,
   bool uses_terminal = false;
   bool command_expand_lists = false;
   std::string comment_buffer;
-  const char* comment = nullptr;
+  char const* comment = nullptr;
   std::vector<std::string> sources;
   std::string job_pool;
+  std::string job_server_aware;
 
   // Keep track of parser state.
   enum tdoing
@@ -65,6 +66,7 @@ bool cmAddCustomTargetCommand(std::vector<std::string> const& args,
     doing_comment,
     doing_source,
     doing_job_pool,
+    doing_job_server_aware,
     doing_nothing
   };
   tdoing doing = doing_command;
@@ -102,6 +104,8 @@ bool cmAddCustomTargetCommand(std::vector<std::string> const& args,
       doing = doing_comment;
     } else if (copy == "JOB_POOL") {
       doing = doing_job_pool;
+    } else if (copy == "JOB_SERVER_AWARE") {
+      doing = doing_job_server_aware;
     } else if (copy == "COMMAND") {
       doing = doing_command;
 
@@ -148,6 +152,9 @@ bool cmAddCustomTargetCommand(std::vector<std::string> const& args,
         case doing_job_pool:
           job_pool = copy;
           break;
+        case doing_job_server_aware:
+          job_server_aware = copy;
+          break;
         default:
           status.SetError("Wrong syntax. Unknown type of argument.");
           return false;
@@ -155,23 +162,11 @@ bool cmAddCustomTargetCommand(std::vector<std::string> const& args,
     }
   }
 
-  std::string::size_type pos = targetName.find_first_of("#<>");
-  if (pos != std::string::npos) {
-    status.SetError(cmStrCat("called with target name containing a \"",
-                             targetName[pos],
-                             "\".  This character is not allowed."));
-    return false;
-  }
-
-  // Some requirements on custom target names already exist
-  // and have been checked at this point.
-  // The following restrictions overlap but depend on policy CMP0037.
   bool nameOk = cmGeneratorExpression::IsValidTargetName(targetName) &&
-    !cmGlobalGenerator::IsReservedTarget(targetName);
-  if (nameOk) {
-    nameOk = targetName.find(':') == std::string::npos;
-  }
-  if (!nameOk && !mf.CheckCMP0037(targetName, cmStateEnums::UTILITY)) {
+    !cmGlobalGenerator::IsReservedTarget(targetName) &&
+    targetName.find(':') == std::string::npos;
+  if (!nameOk) {
+    mf.IssueInvalidTargetNameError(targetName);
     return false;
   }
 
@@ -223,6 +218,7 @@ bool cmAddCustomTargetCommand(std::vector<std::string> const& args,
   cc->SetUsesTerminal(uses_terminal);
   cc->SetCommandExpandLists(command_expand_lists);
   cc->SetJobPool(job_pool);
+  cc->SetJobserverAware(cmIsOn(job_server_aware));
   cmTarget* target =
     mf.AddUtilityCommand(targetName, excludeFromAll, std::move(cc));
 

@@ -37,11 +37,16 @@
 #define ISCNTRL(x) (ISLOWCNTRL(x) || IS7F(x))
 #define ISALPHA(x) (ISLOWER(x) || ISUPPER(x))
 #define ISXDIGIT(x) (ISDIGIT(x) || ISLOWHEXALHA(x) || ISUPHEXALHA(x))
+#define ISODIGIT(x) (((x) >= '0') && ((x) <= '7'))
 #define ISALNUM(x)  (ISDIGIT(x) || ISLOWER(x) || ISUPPER(x))
 #define ISUPPER(x)  (((x) >= 'A') && ((x) <= 'Z'))
 #define ISLOWER(x)  (((x) >= 'a') && ((x) <= 'z'))
 #define ISDIGIT(x)  (((x) >= '0') && ((x) <= '9'))
 #define ISBLANK(x)  (((x) == ' ') || ((x) == '\t'))
 #define ISSPACE(x)  (ISBLANK(x) || (((x) >= 0xa) && ((x) <= 0x0d)))
+#define ISURLPUNTCS(x) (((x) == '-') || ((x) == '.') || ((x) == '_') || \
+                        ((x) == '~'))
+#define ISUNRESERVED(x) (ISALNUM(x) || ISURLPUNTCS(x))
+#define ISNEWLINE(x) (((x) == '\n') || (x) == '\r')
 
 #endif /* HEADER_CURL_CTYPE_H */

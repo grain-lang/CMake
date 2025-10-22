@@ -117,7 +117,7 @@ void Curl_amiga_cleanup(void)
 
 #ifdef CURLRES_AMIGA
 /*
- * Because we need to handle the different cases in hostip4.c at run-time,
+ * Because we need to handle the different cases in hostip4.c at runtime,
  * not at compile-time, based on what was detected in Curl_amiga_init(),
  * we replace it completely with our own as to not complicate the baseline
  * code. Assumes malloc/calloc/free are thread safe because Curl_he2ai()
@@ -178,12 +178,13 @@ struct Curl_addrinfo *Curl_ipv4_resolve_r(const char *hostname,
 #endif /* CURLRES_AMIGA */
 
 #ifdef USE_AMISSL
+#include <signal.h>
 int Curl_amiga_select(int nfds, fd_set *readfds, fd_set *writefds,
                       fd_set *errorfds, struct timeval *timeout)
 {
   int r = WaitSelect(nfds, readfds, writefds, errorfds, timeout, 0);
   /* Ensure Ctrl-C signal is actioned */
-  if((r == -1) && (SOCKERRNO == EINTR))
+  if((r == -1) && (SOCKERRNO == SOCKEINTR))
     raise(SIGINT);
   return r;
 }
@@ -195,12 +196,11 @@ int Curl_amiga_select(int nfds, fd_set *readfds, fd_set *writefds,
  */
 
 struct Library *SocketBase = NULL;
-extern int errno, h_errno;
 
 #ifdef __libnix__
 void __request(const char *msg);
 #else
-# define __request(msg)       Printf(msg "\n\a")
+# define __request(msg)       Printf((const unsigned char *)(msg "\n\a"), 0)
 #endif
 
 void Curl_amiga_cleanup(void)
@@ -214,7 +214,7 @@ void Curl_amiga_cleanup(void)
 CURLcode Curl_amiga_init(void)
 {
   if(!SocketBase)
-    SocketBase = OpenLibrary("bsdsocket.library", 4);
+    SocketBase = OpenLibrary((const unsigned char *)"bsdsocket.library", 4);
 
   if(!SocketBase) {
     __request("No TCP/IP Stack running!");

@@ -1,9 +1,12 @@
 include(RunCMake)
 
+run_cmake(ConfigureLogTransitions)
+run_cmake(ConfigureLogTransitionsSuppressed)
 run_cmake(EmptyOldStyle)
 run_cmake(FromPATHEnv)
 run_cmake(PrefixInPATH)
 run_cmake(Required)
+run_cmake(Optional)
 run_cmake(NO_CACHE)
 run_cmake(REGISTRY_VIEW-no-view)
 run_cmake(REGISTRY_VIEW-wrong-view)
@@ -11,6 +14,10 @@ run_cmake(VALIDATOR-no-function)
 run_cmake(VALIDATOR-undefined-function)
 run_cmake(VALIDATOR-specify-macro)
 run_cmake(VALIDATOR)
+
+if(CMAKE_HOST_WIN32 AND MINGW)
+  run_cmake(MSYSTEM_PREFIX)
+endif()
 
 if(APPLE)
   run_cmake(FrameworksWithSubdirs)

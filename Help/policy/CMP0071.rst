@@ -28,7 +28,9 @@ source files.
   source file properties :prop_sf:`SKIP_AUTOMOC`, :prop_sf:`SKIP_AUTOUIC` or
   :prop_sf:`SKIP_AUTOGEN`.
 
-Source skip example::
+Source skip example:
+
+.. code-block:: cmake
 
   # ...
   set_property(SOURCE /path/to/file1.h PROPERTY SKIP_AUTOMOC ON)
@@ -36,9 +38,8 @@ Source skip example::
   set_property(SOURCE /path/to/file3.h PROPERTY SKIP_AUTOGEN ON)
   # ...
 
-This policy was introduced in CMake version 3.10.  CMake version
-|release| warns when the policy is not set and uses ``OLD`` behavior.
-Use the :command:`cmake_policy` command to set it to ``OLD`` or ``NEW``
-explicitly.
+.. |INTRODUCED_IN_CMAKE_VERSION| replace:: 3.10
+.. |WARNS_OR_DOES_NOT_WARN| replace:: warns
+.. include:: include/STANDARD_ADVICE.rst
 
-.. include:: DEPRECATED.txt
+.. include:: include/DEPRECATED.rst

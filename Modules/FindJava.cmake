@@ -1,84 +1,160 @@
 # Distributed under the OSI-approved BSD 3-Clause License.  See accompanying
-# file Copyright.txt or https://cmake.org/licensing for details.
+# file LICENSE.rst or https://cmake.org/licensing for details.
 
 #[=======================================================================[.rst:
 FindJava
 --------
 
-Find Java
-
-This module finds if Java is installed and determines where the
-include files and libraries are.  The caller may set variable ``JAVA_HOME``
-to specify a Java installation prefix explicitly.
-
-See also the :module:`FindJNI` module to find Java Native Interface (JNI).
+Finds the Java installation and determines its runtime tools and development
+components.
 
 .. versionadded:: 3.10
-  Added support for Java 9+ version parsing.
+  Support for Java 9+ version parsing.
 
-Specify one or more of the following components as you call this find module. See example below.
+Components
+^^^^^^^^^^
 
-::
+This module supports the following components:
 
-  Runtime     = Java Runtime Environment used to execute Java byte-compiled applications
-  Development = Development tools (java, javac, javah, jar and javadoc), includes Runtime component
-  IdlJ        = Interface Description Language (IDL) to Java compiler
-  JarSigner   = Signer and verifier tool for Java Archive (JAR) files
+``Runtime``
+  Finds the Java Runtime Environment used to execute Java byte-compiled
+  applications.
 
+``Development``
+  Finds development tools (``java``, ``javac``, ``javah``, ``jar``, and
+  ``javadoc``).  Specifying this component also implies the ``Runtime``
+  component.
 
-This module sets the following result variables:
+``IdlJ``
+  .. versionadded:: 3.4
 
-::
+  Finds the Interface Description Language (IDL) to Java compiler.
 
-  Java_JAVA_EXECUTABLE      = the full path to the Java runtime
-  Java_JAVAC_EXECUTABLE     = the full path to the Java compiler
-  Java_JAVAH_EXECUTABLE     = the full path to the Java header generator
-  Java_JAVADOC_EXECUTABLE   = the full path to the Java documentation generator
-  Java_IDLJ_EXECUTABLE      = the full path to the Java idl compiler
-  Java_JAR_EXECUTABLE       = the full path to the Java archiver
-  Java_JARSIGNER_EXECUTABLE = the full path to the Java jar signer
-  Java_VERSION_STRING       = Version of java found, eg. 1.6.0_12
-  Java_VERSION_MAJOR        = The major version of the package found.
-  Java_VERSION_MINOR        = The minor version of the package found.
-  Java_VERSION_PATCH        = The patch version of the package found.
-  Java_VERSION_TWEAK        = The tweak version of the package found (after '_')
-  Java_VERSION              = This is set to: $major[.$minor[.$patch[.$tweak]]]
+``JarSigner``
+  .. versionadded:: 3.4
 
-.. versionadded:: 3.4
-  Added the ``Java_IDLJ_EXECUTABLE`` and ``Java_JARSIGNER_EXECUTABLE``
-  variables.
+  Finds the signer and verifier tool for Java Archive (JAR) files.
 
-The minimum required version of Java can be specified using the
-:command:`find_package` syntax, e.g.
+Components can optionally be specified using the standard syntax with:
+
+.. code-block:: cmake
+
+  find_package(Java [COMPONENTS <components>...])
+
+If no ``COMPONENTS`` are specified, the module searches for the ``Runtime``
+component by default.
+
+Result Variables
+^^^^^^^^^^^^^^^^
+
+This module defines the following variables:
+
+``Java_FOUND``
+  Boolean indicating whether Java with all specified components is found.
+
+``Java_<component>_FOUND``
+  Boolean indicating whether the ``<component>`` is found.
+
+``Java_VERSION``
+  Version of Java found.  This is set to:
+  ``<major>[.<minor>[.<patch>[.<tweak>]]]``.
+
+``Java_VERSION_MAJOR``
+  The major version of Java found.
+
+``Java_VERSION_MINOR``
+  The minor version of Java found.
+
+``Java_VERSION_PATCH``
+  The patch version of Java found.
+
+``Java_VERSION_TWEAK``
+  The tweak version of Java found (part after the underscore character ``_``).
+
+``Java_VERSION_STRING``
+  Version of Java found, e.g., ``1.6.0_12``.
+
+  .. note::
+
+    ``Java_VERSION`` and ``Java_VERSION_STRING`` are not guaranteed to be
+    identical.  For example, some Java versions may return:
+    ``Java_VERSION_STRING = 1.8.0_17`` and ``Java_VERSION = 1.8.0.17``.
+
+    Another example is the Java OEM, with ``Java_VERSION_STRING = 1.8.0-oem``
+    and ``Java_VERSION = 1.8.0``.
+
+Cache Variables
+^^^^^^^^^^^^^^^
+
+The following cache variables may also be set:
+
+``Java_JAVA_EXECUTABLE``
+  The full path to the Java runtime.
+
+``Java_JAVAC_EXECUTABLE``
+  The full path to the Java compiler.
+
+``Java_JAVAH_EXECUTABLE``
+  The full path to the Java header generator.
+
+``Java_JAVADOC_EXECUTABLE``
+  The full path to the Java documentation generator.
+
+``Java_IDLJ_EXECUTABLE``
+  .. versionadded:: 3.4
+
+  The full path to the Java idl compiler.
+
+``Java_JAR_EXECUTABLE``
+  The full path to the Java archiver.
+
+``Java_JARSIGNER_EXECUTABLE``
+  .. versionadded:: 3.4
+
+  The full path to the Java jar signer.
+
+Hints
+^^^^^
+
+This module accepts the following variables:
+
+``JAVA_HOME``
+  The caller can set this variable to specify the installation directory of Java
+  explicitly.
+
+Examples
+^^^^^^^^
+
+Finding Java:
+
+.. code-block:: cmake
+
+  find_package(Java)
+
+Finding Java with at least the specified minimum version:
 
 .. code-block:: cmake
 
   find_package(Java 1.8)
 
-NOTE: ``${Java_VERSION}`` and ``${Java_VERSION_STRING}`` are not guaranteed to
-be identical.  For example some java version may return:
-``Java_VERSION_STRING = 1.8.0_17`` and ``Java_VERSION = 1.8.0.17``
+Finding Java and making it required (if Java is not found, processing stops with
+an error message):
 
-another example is the Java OEM, with: ``Java_VERSION_STRING = 1.8.0-oem``
-and ``Java_VERSION = 1.8.0``
+.. code-block:: cmake
 
-For these components the following variables are set:
-
-::
-
-  Java_FOUND                    - TRUE if all components are found.
-  Java_<component>_FOUND        - TRUE if <component> is found.
-
-
-
-Example Usages:
-
-::
-
-  find_package(Java)
   find_package(Java 1.8 REQUIRED)
-  find_package(Java COMPONENTS Runtime)
-  find_package(Java COMPONENTS Development)
+
+Specifying the needed Java components to find:
+
+.. code-block:: cmake
+
+  find_package(Java COMPONENTS Development JarSigner)
+
+See Also
+^^^^^^^^
+
+* The :module:`FindJNI` module to find Java Native Interface (JNI).
+* The :module:`UseJava` module to use Java in CMake.
 #]=======================================================================]
 
 include(${CMAKE_CURRENT_LIST_DIR}/CMakeFindJavaCommon.cmake)
@@ -90,13 +166,12 @@ if(_JAVA_HOME)
 endif()
 if (WIN32)
   macro (_JAVA_GET_INSTALLED_VERSIONS _KIND)
-    execute_process(COMMAND REG QUERY "HKLM\\SOFTWARE\\JavaSoft\\${_KIND}"
-      RESULT_VARIABLE _JAVA_RESULT
-      OUTPUT_VARIABLE _JAVA_VERSIONS
-      ERROR_QUIET)
-    if (NOT  _JAVA_RESULT)
-      string (REGEX MATCHALL "HKEY_LOCAL_MACHINE\\\\SOFTWARE\\\\JavaSoft\\\\${_KIND}\\\\[0-9._]+" _JAVA_VERSIONS "${_JAVA_VERSIONS}")
-      string (REGEX REPLACE "HKEY_LOCAL_MACHINE\\\\SOFTWARE\\\\JavaSoft\\\\${_KIND}\\\\([0-9._]+)" "\\1" _JAVA_VERSIONS "${_JAVA_VERSIONS}")
+    cmake_host_system_information(RESULT _JAVA_VERSIONS
+    QUERY WINDOWS_REGISTRY "HKLM/SOFTWARE/JavaSoft/${_KIND}"
+    SUBKEYS)
+    if (_JAVA_VERSIONS)
+      string (REGEX MATCHALL "[0-9._]+" _JAVA_VERSIONS "${_JAVA_VERSIONS}")
+      string (REGEX REPLACE "([0-9._]+)" "\\1" _JAVA_VERSIONS "${_JAVA_VERSIONS}")
       if (_JAVA_VERSIONS)
         # sort versions. Most recent first
         list (SORT _JAVA_VERSIONS COMPARE NATURAL ORDER DESCENDING)
@@ -221,7 +296,7 @@ if(Java_JAVA_EXECUTABLE)
       unset(_java_var)
       set(Java_VERSION "${Java_VERSION_MAJOR}")
       if(NOT "x${Java_VERSION}" STREQUAL "x")
-        foreach(_java_c MINOR PATCH TWEAK)
+        foreach(_java_c IN ITEMS "MINOR" "PATCH" "TWEAK")
           if(NOT "x${Java_VERSION_${_java_c}}" STREQUAL "x")
             string(APPEND Java_VERSION ".${Java_VERSION_${_java_c}}")
           else()
@@ -271,10 +346,10 @@ find_program(Java_JARSIGNER_EXECUTABLE
   PATHS ${_JAVA_PATHS}
 )
 
-include(${CMAKE_CURRENT_LIST_DIR}/FindPackageHandleStandardArgs.cmake)
+include(FindPackageHandleStandardArgs)
 if(Java_FIND_COMPONENTS)
   set(_JAVA_REQUIRED_VARS)
-  foreach(component ${Java_FIND_COMPONENTS})
+  foreach(component IN LISTS Java_FIND_COMPONENTS)
     # User just want to execute some Java byte-compiled
     If(component STREQUAL "Runtime")
       list(APPEND _JAVA_REQUIRED_VARS Java_JAVA_EXECUTABLE)
@@ -316,7 +391,7 @@ if(Java_FIND_COMPONENTS)
     VERSION_VAR Java_VERSION
     )
   if(Java_FOUND)
-    foreach(component ${Java_FIND_COMPONENTS})
+    foreach(component IN LISTS Java_FIND_COMPONENTS)
       set(Java_${component}_FOUND TRUE)
     endforeach()
   endif()

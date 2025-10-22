@@ -1,5 +1,5 @@
 /* Distributed under the OSI-approved BSD 3-Clause License.  See accompanying
-   file Copyright.txt or https://cmake.org/licensing for details.  */
+   file LICENSE.rst or https://cmake.org/licensing for details.  */
 
 #include "cmConfigure.h" // IWYU pragma: keep
 
@@ -15,6 +15,8 @@
 #include <cm/string_view>
 
 #if defined(_WIN32)
+#  include <cmext/string_view>
+
 #  include "cmStringAlgorithms.h"
 #endif
 
@@ -55,16 +57,18 @@ cmCMakePath cmCMakePath::GetWideExtension() const
 cmCMakePath cmCMakePath::GetNarrowStem() const
 {
   auto stem = this->Path.stem().string();
-  if (!stem.empty()) {
-    auto pos = stem.find('.', stem[0] == '.' ? 1 : 0);
-    if (pos != std::string::npos) {
-      return stem.substr(0, pos);
-    }
+  if (stem.empty() || stem == "." || stem == "..") {
+    return stem;
+  }
+
+  auto pos = stem.find('.', stem[0] == '.' ? 1 : 0);
+  if (pos != std::string::npos) {
+    return stem.substr(0, pos);
   }
   return stem;
 }
 
-cmCMakePath cmCMakePath::Absolute(const cm::filesystem::path& base) const
+cmCMakePath cmCMakePath::Absolute(cm::filesystem::path const& base) const
 {
   if (this->Path.is_relative()) {
     auto path = base;
@@ -76,7 +80,7 @@ cmCMakePath cmCMakePath::Absolute(const cm::filesystem::path& base) const
   return *this;
 }
 
-bool cmCMakePath::IsPrefix(const cmCMakePath& path) const
+bool cmCMakePath::IsPrefix(cmCMakePath const& path) const
 {
   auto prefix_it = this->Path.begin();
   auto prefix_end = this->Path.end();

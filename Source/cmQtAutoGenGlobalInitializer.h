@@ -1,5 +1,5 @@
 /* Distributed under the OSI-approved BSD 3-Clause License.  See accompanying
-   file Copyright.txt or https://cmake.org/licensing for details.  */
+   file LICENSE.rst or https://cmake.org/licensing for details.  */
 #pragma once
 
 #include "cmConfigure.h" // IWYU pragma: keep
@@ -66,14 +66,17 @@ private:
   void AddToGlobalAutoRcc(cmLocalGenerator* localGen,
                           std::string const& targetName);
 
-  cmQtAutoGen::CompilerFeaturesHandle GetCompilerFeatures(
-    std::string const& generator, std::string const& executable,
-    std::string& error);
+  cmQtAutoGen::ConfigStrings<cmQtAutoGen::CompilerFeaturesHandle>
+  GetCompilerFeatures(std::string const& generator,
+                      cmQtAutoGen::ConfigString const& executable,
+                      std::string& error, bool isMultiConfig,
+                      bool UseBetterGraph);
 
   std::vector<std::unique_ptr<cmQtAutoGenInitializer>> Initializers_;
   std::map<cmLocalGenerator*, std::string> GlobalAutoGenTargets_;
   std::map<cmLocalGenerator*, std::string> GlobalAutoRccTargets_;
-  std::unordered_map<std::string, cmQtAutoGen::CompilerFeaturesHandle>
+  cmQtAutoGen::ConfigStrings<
+    std::unordered_map<std::string, cmQtAutoGen::CompilerFeaturesHandle>>
     CompilerFeatures_;
   Keywords const Keywords_;
 };

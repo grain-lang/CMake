@@ -481,6 +481,10 @@ suppression macro KWIML_ABI_NO_VERIFY was defined.
 #elif defined(__riscv) || defined(__riscv__)
 # define KWIML_ABI_ENDIAN_ID KWIML_ABI_ENDIAN_ID_LITTLE
 
+/* Sunway */
+#elif defined(__sw_64) || defined(__sw_64__)
+# define KWIML_ABI_ENDIAN_ID KWIML_ABI_ENDIAN_ID_LITTLE
+
 /* Unknown CPU */
 #elif !defined(KWIML_ABI_NO_ERROR_ENDIAN)
 # error "Byte order of target CPU unknown."
@@ -494,7 +498,7 @@ suppression macro KWIML_ABI_NO_VERIFY was defined.
 
 #if defined(_MSC_VER)
 # pragma warning (push)
-# pragma warning (disable:4309) /* static_cast trunction of constant value */
+# pragma warning (disable:4309) /* static_cast truncation of constant value */
 # pragma warning (disable:4310) /* cast truncates constant value */
 #endif
 

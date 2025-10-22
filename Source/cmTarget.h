@@ -1,11 +1,10 @@
 /* Distributed under the OSI-approved BSD 3-Clause License.  See accompanying
-   file Copyright.txt or https://cmake.org/licensing for details.  */
+   file LICENSE.rst or https://cmake.org/licensing for details.  */
 #pragma once
 
 #include "cmConfigure.h" // IWYU pragma: keep
 
 #include <iosfwd>
-#include <map>
 #include <memory>
 #include <set>
 #include <string>
@@ -15,7 +14,7 @@
 #include <cm/optional>
 
 #include "cmAlgorithms.h"
-#include "cmFileSet.h"
+#include "cmListFileCache.h"
 #include "cmPolicies.h"
 #include "cmStateTypes.h"
 #include "cmStringAlgorithms.h"
@@ -23,20 +22,17 @@
 #include "cmValue.h"
 
 class cmCustomCommand;
+class cmFileSet;
+class cmFindPackageStack;
 class cmGlobalGenerator;
 class cmInstallTargetGenerator;
-class cmListFileBacktrace;
-class cmListFileContext;
 class cmMakefile;
 class cmPropertyMap;
 class cmSourceFile;
 class cmTargetExport;
 class cmTargetInternals;
 
-template <typename T>
-class BT;
-template <typename T>
-class BTs;
+enum class cmFileSetVisibility;
 
 /** \class cmTarget
  * \brief Represent a library or executable target loaded from a makefile.
@@ -52,6 +48,7 @@ public:
     Generated,
     Imported,
     ImportedGlobally,
+    Foreign,
   };
 
   enum class PerConfig
@@ -80,7 +77,8 @@ public:
   cmGlobalGenerator* GetGlobalGenerator() const;
 
   //! Set/Get the name of the target
-  const std::string& GetName() const;
+  std::string const& GetName() const;
+  std::string const& GetTemplateName() const;
 
   //! Get the policy map
   cmPolicies::PolicyMap const& GetPolicyMap() const;
@@ -116,8 +114,7 @@ public:
   //! Add sources to the target.
   void AddSources(std::vector<std::string> const& srcs);
   void AddTracedSources(std::vector<std::string> const& srcs);
-  std::string GetSourceCMP0049(const std::string& src);
-  cmSourceFile* AddSource(const std::string& src, bool before = false);
+  cmSourceFile* AddSource(std::string const& src, bool before = false);
 
   //! how we identify a library, by name and type
   using LibraryID = std::pair<std::string, cmTargetLinkLibraryType>;
@@ -176,30 +173,35 @@ public:
   void AddUtility(std::string const& name, bool cross,
                   cmMakefile const* mf = nullptr);
   void AddUtility(BT<std::pair<std::string, bool>> util);
+
+  void AddCodegenDependency(std::string const& name);
+
+  std::set<std::string> const& GetCodegenDeps() const;
+
   //! Get the utilities used by this target
   std::set<BT<std::pair<std::string, bool>>> const& GetUtilities() const;
 
   //! Set/Get a property of this target file
-  void SetProperty(const std::string& prop, cmValue value);
-  void SetProperty(const std::string& prop, std::nullptr_t)
+  void SetProperty(std::string const& prop, cmValue value);
+  void SetProperty(std::string const& prop, std::nullptr_t)
   {
     this->SetProperty(prop, cmValue{ nullptr });
   }
-  void SetProperty(const std::string& prop, const std::string& value)
+  void SetProperty(std::string const& prop, std::string const& value)
   {
     this->SetProperty(prop, cmValue(value));
   }
   void AppendProperty(
-    const std::string& prop, const std::string& value,
+    std::string const& prop, std::string const& value,
     cm::optional<cmListFileBacktrace> const& bt = cm::nullopt,
     bool asString = false);
   //! Might return a nullptr if the property is not set or invalid
-  cmValue GetProperty(const std::string& prop) const;
+  cmValue GetProperty(std::string const& prop) const;
   //! Always returns a valid pointer
   std::string const& GetSafeProperty(std::string const& prop) const;
-  bool GetPropertyAsBool(const std::string& prop) const;
-  void CheckProperty(const std::string& prop, cmMakefile* context) const;
-  cmValue GetComputedProperty(const std::string& prop, cmMakefile& mf) const;
+  bool GetPropertyAsBool(std::string const& prop) const;
+  void CheckProperty(std::string const& prop, cmMakefile* context) const;
+  cmValue GetComputedProperty(std::string const& prop, cmMakefile& mf) const;
   //! Get all properties
   cmPropertyMap const& GetProperties() const;
 
@@ -215,7 +217,9 @@ public:
   bool IsSynthetic() const;
   bool IsImported() const;
   bool IsImportedGloballyVisible() const;
+  bool IsForeign() const;
   bool IsPerConfig() const;
+  bool IsRuntimeBinary() const;
   bool CanCompileSources() const;
 
   bool GetMappedConfig(std::string const& desired_config, cmValue& loc,
@@ -231,6 +235,9 @@ public:
   //! Return whether this target is a shared library Framework on Apple.
   bool IsFrameworkOnApple() const;
 
+  //! Return whether to archive shared library or not on AIX.
+  bool IsArchivedAIXSharedLibrary() const;
+
   //! Return whether this target is an executable Bundle on Apple.
   bool IsAppBundleOnApple() const;
 
@@ -242,6 +249,9 @@ public:
   //! Get a backtrace from the creation of the target.
   cmListFileBacktrace const& GetBacktrace() const;
 
+  //! Get a find_package call stack from the creation of the target.
+  cmFindPackageStack const& GetFindPackageStack() const;
+
   void InsertInclude(BT<std::string> const& entry, bool before = false);
   void InsertCompileOption(BT<std::string> const& entry, bool before = false);
   void InsertCompileDefinition(BT<std::string> const& entry);
@@ -250,11 +260,9 @@ public:
   void InsertPrecompileHeader(BT<std::string> const& entry);
 
   void AppendBuildInterfaceIncludes();
-  void FinalizeTargetConfiguration(
-    const cmBTStringRange& noConfigCompileDefinitions,
-    cm::optional<std::map<std::string, cmValue>>& perConfigCompileDefinitions);
+  void FinalizeTargetConfiguration(cmBTStringRange const& compileDefinitions);
 
-  std::string GetDebugGeneratorExpressions(const std::string& value,
+  std::string GetDebugGeneratorExpressions(std::string const& value,
                                            cmTargetLinkLibraryType llt) const;
 
   void AddSystemIncludeDirectories(std::set<std::string> const& incs);
@@ -266,11 +274,11 @@ public:
     cmTargetExport const& te) const;
 
   BTs<std::string> const* GetLanguageStandardProperty(
-    const std::string& propertyName) const;
+    std::string const& propertyName) const;
 
   void SetLanguageStandardProperty(std::string const& lang,
                                    std::string const& value,
-                                   const std::string& feature);
+                                   std::string const& feature);
 
   cmBTStringRange GetIncludeDirectoriesEntries() const;
 
@@ -294,13 +302,17 @@ public:
   cmBTStringRange GetLinkInterfaceDirectEntries() const;
   cmBTStringRange GetLinkInterfaceDirectExcludeEntries() const;
 
+  void CopyPolicyStatuses(cmTarget const* tgt);
+  void CopyImportedCxxModulesEntries(cmTarget const* tgt);
+  void CopyImportedCxxModulesProperties(cmTarget const* tgt);
+
   cmBTStringRange GetHeaderSetsEntries() const;
   cmBTStringRange GetCxxModuleSetsEntries() const;
 
   cmBTStringRange GetInterfaceHeaderSetsEntries() const;
   cmBTStringRange GetInterfaceCxxModuleSetsEntries() const;
 
-  std::string ImportedGetFullPath(const std::string& config,
+  std::string ImportedGetFullPath(std::string const& config,
                                   cmStateEnums::ArtifactType artifact) const;
 
   struct StrictTargetComparison
@@ -308,28 +320,27 @@ public:
     bool operator()(cmTarget const* t1, cmTarget const* t2) const;
   };
 
-  const cmFileSet* GetFileSet(const std::string& name) const;
-  cmFileSet* GetFileSet(const std::string& name);
-  std::pair<cmFileSet*, bool> GetOrCreateFileSet(const std::string& name,
-                                                 const std::string& type,
+  cmFileSet const* GetFileSet(std::string const& name) const;
+  cmFileSet* GetFileSet(std::string const& name);
+  std::pair<cmFileSet*, bool> GetOrCreateFileSet(std::string const& name,
+                                                 std::string const& type,
                                                  cmFileSetVisibility vis);
 
   std::vector<std::string> GetAllFileSetNames() const;
   std::vector<std::string> GetAllInterfaceFileSets() const;
 
-  static std::string GetFileSetsPropertyName(const std::string& type);
-  static std::string GetInterfaceFileSetsPropertyName(const std::string& type);
+  static std::string GetFileSetsPropertyName(std::string const& type);
+  static std::string GetInterfaceFileSetsPropertyName(std::string const& type);
+
+  bool HasFileSets() const;
 
 private:
-  template <typename ValueType>
-  void StoreProperty(const std::string& prop, ValueType value);
-
   // Internal representation details.
   friend class cmGeneratorTarget;
 
-  const char* GetSuffixVariableInternal(
+  char const* GetSuffixVariableInternal(
     cmStateEnums::ArtifactType artifact) const;
-  const char* GetPrefixVariableInternal(
+  char const* GetPrefixVariableInternal(
     cmStateEnums::ArtifactType artifact) const;
 
   std::unique_ptr<cmTargetInternals> impl;

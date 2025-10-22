@@ -1,5 +1,5 @@
 /* Distributed under the OSI-approved BSD 3-Clause License.  See accompanying
-   file Copyright.txt or https://cmake.org/licensing for details.  */
+   file LICENSE.rst or https://cmake.org/licensing for details.  */
 #include "cmCTestRunTest.h"
 
 #include <algorithm>
@@ -7,7 +7,6 @@
 #include <cstddef> // IWYU pragma: keep
 #include <cstdint>
 #include <cstdio>
-#include <cstring>
 #include <iomanip>
 #include <ratio>
 #include <sstream>
@@ -22,16 +21,21 @@
 #include "cmCTestMemCheckHandler.h"
 #include "cmCTestMultiProcessHandler.h"
 #include "cmDuration.h"
+#include "cmInstrumentation.h"
 #include "cmProcess.h"
 #include "cmStringAlgorithms.h"
 #include "cmSystemTools.h"
+#include "cmUVHandlePtr.h"
 #include "cmWorkingDirectory.h"
 
-cmCTestRunTest::cmCTestRunTest(cmCTestMultiProcessHandler& multiHandler)
+cmCTestRunTest::cmCTestRunTest(cmCTestMultiProcessHandler& multiHandler,
+                               int index)
   : MultiTestHandler(multiHandler)
+  , Index(index)
+  , CTest(MultiTestHandler.CTest)
+  , TestHandler(MultiTestHandler.TestHandler)
+  , TestProperties(MultiTestHandler.Properties[Index])
 {
-  this->CTest = multiHandler.CTest;
-  this->TestHandler = multiHandler.TestHandler;
 }
 
 void cmCTestRunTest::CheckOutput(std::string const& line)
@@ -152,6 +156,18 @@ cmCTestRunTest::EndTestResult cmCTestRunTest::EndTest(size_t completed,
       }
     }
   }
+  std::string resourceSpecParseError;
+  if (!this->TestProperties->GeneratedResourceSpecFile.empty()) {
+    this->MultiTestHandler.ResourceSpecFile =
+      this->TestProperties->GeneratedResourceSpecFile;
+    if (!this->MultiTestHandler.InitResourceAllocator(
+          resourceSpecParseError)) {
+      reason = "Invalid resource spec file";
+      forceFail = true;
+    } else {
+      this->MultiTestHandler.CheckResourceAvailability();
+    }
+  }
   std::ostringstream outputStream;
   if (res == cmProcess::State::Exited) {
     bool success = !forceFail &&
@@ -236,7 +252,7 @@ cmCTestRunTest::EndTestResult cmCTestRunTest::EndTest(size_t completed,
       // If the test did not pass, reprint test name and error
       std::string output = this->GetTestPrefix(completed, total);
       std::string testName = this->TestProperties->Name;
-      const int maxTestNameWidth = this->CTest->GetMaxTestNameWidth();
+      int const maxTestNameWidth = this->CTest->GetMaxTestNameWidth();
       testName.resize(maxTestNameWidth + 4, '.');
 
       output += testName;
@@ -260,6 +276,16 @@ cmCTestRunTest::EndTestResult cmCTestRunTest::EndTest(size_t completed,
     cmCTestLog(this->CTest, HANDLER_OUTPUT, this->ProcessOutput << std::endl);
   }
 
+  if (!resourceSpecParseError.empty()) {
+    cmCTestLog(this->CTest, ERROR_MESSAGE,
+               resourceSpecParseError << std::endl);
+  } else if (!this->TestProperties->GeneratedResourceSpecFile.empty()) {
+    cmCTestLog(this->CTest, HANDLER_VERBOSE_OUTPUT,
+               "Using generated resource spec file "
+                 << this->TestProperties->GeneratedResourceSpecFile
+                 << std::endl);
+  }
+
   if (this->TestHandler->LogFile) {
     *this->TestHandler->LogFile << "Test time = " << buf << std::endl;
   }
@@ -271,16 +297,16 @@ cmCTestRunTest::EndTestResult cmCTestRunTest::EndTest(size_t completed,
   if (!this->TestHandler->MemCheck && started) {
     this->TestHandler->CleanTestOutput(
       this->ProcessOutput,
-      static_cast<size_t>(
-        this->TestResult.Status == cmCTestTestHandler::COMPLETED
-          ? this->TestHandler->CustomMaximumPassedTestOutputSize
-          : this->TestHandler->CustomMaximumFailedTestOutputSize),
-      this->TestHandler->TestOutputTruncation);
+      static_cast<size_t>(this->TestResult.Status ==
+                              cmCTestTestHandler::COMPLETED
+                            ? this->TestHandler->TestOptions.OutputSizePassed
+                            : this->TestHandler->TestOptions.OutputSizeFailed),
+      this->TestHandler->TestOptions.OutputTruncation);
   }
   this->TestResult.Reason = reason;
   if (this->TestHandler->LogFile) {
     bool pass = true;
-    const char* reasonType = "Test Pass Reason";
+    char const* reasonType = "Test Pass Reason";
     if (this->TestResult.Status != cmCTestTestHandler::COMPLETED &&
         this->TestResult.Status != cmCTestTestHandler::NOT_RUN) {
       reasonType = "Test Fail Reason";
@@ -293,7 +319,7 @@ cmCTestRunTest::EndTestResult cmCTestRunTest::EndTest(size_t completed,
     ttime -= minutes;
     auto seconds = std::chrono::duration_cast<std::chrono::seconds>(ttime);
     char buffer[100];
-    snprintf(buffer, sizeof(buffer), "%02d:%02d:%02d",
+    snprintf(buffer, sizeof(buffer), "%02u:%02u:%02u",
              static_cast<unsigned>(hours.count()),
              static_cast<unsigned>(minutes.count()),
              static_cast<unsigned>(seconds.count()));
@@ -372,9 +398,7 @@ bool cmCTestRunTest::StartAgain(std::unique_ptr<cmCTestRunTest> runner,
   // change to tests directory
   cmWorkingDirectory workdir(testRun->TestProperties->Directory);
   if (workdir.Failed()) {
-    testRun->StartFailure("Failed to change working directory to " +
-                            testRun->TestProperties->Directory + " : " +
-                            std::strerror(workdir.GetLastResult()),
+    testRun->StartFailure(testRun->TotalNumberOfTests, workdir.GetError(),
                           "Failed to change working directory");
     return true;
   }
@@ -437,25 +461,25 @@ void cmCTestRunTest::MemCheckPostProcess()
 }
 
 void cmCTestRunTest::StartFailure(std::unique_ptr<cmCTestRunTest> runner,
-                                  std::string const& output,
+                                  size_t total, std::string const& output,
                                   std::string const& detail)
 {
   auto* testRun = runner.get();
 
   testRun->TestProcess = cm::make_unique<cmProcess>(std::move(runner));
-  testRun->StartFailure(output, detail);
+  testRun->StartFailure(total, output, detail);
 
   testRun->FinalizeTest(false);
 }
 
-void cmCTestRunTest::StartFailure(std::string const& output,
+void cmCTestRunTest::StartFailure(size_t total, std::string const& output,
                                   std::string const& detail)
 {
   // Still need to log the Start message so the test summary records our
   // attempt to start this test
   if (!this->CTest->GetTestProgressOutput()) {
     cmCTestLog(this->CTest, HANDLER_OUTPUT,
-               std::setw(2 * getNumWidth(this->TotalNumberOfTests) + 8)
+               std::setw(2 * getNumWidth(total) + 8)
                  << "Start "
                  << std::setw(getNumWidth(this->TestHandler->GetMaxIndex()))
                  << this->TestProperties->Index << ": "
@@ -503,7 +527,7 @@ std::string cmCTestRunTest::GetTestPrefix(size_t completed, size_t total) const
   return outputStream.str();
 }
 
-bool cmCTestRunTest::StartTest(std::unique_ptr<cmCTestRunTest> runner,
+void cmCTestRunTest::StartTest(std::unique_ptr<cmCTestRunTest> runner,
                                size_t completed, size_t total)
 {
   auto* testRun = runner.get();
@@ -512,10 +536,7 @@ bool cmCTestRunTest::StartTest(std::unique_ptr<cmCTestRunTest> runner,
 
   if (!testRun->StartTest(completed, total)) {
     testRun->FinalizeTest(false);
-    return false;
   }
-
-  return true;
 }
 
 // Starts the execution of a test.  Returns once it has started
@@ -643,6 +664,9 @@ bool cmCTestRunTest::StartTest(size_t completed, size_t total)
     return false;
   }
   this->StartTime = this->CTest->CurrentTime();
+  if (this->CTest->GetInstrumentation().HasQuery()) {
+    this->CTest->GetInstrumentation().GetPreTestStats();
+  }
 
   return this->ForkProcess();
 }
@@ -768,11 +792,12 @@ bool cmCTestRunTest::ForkProcess()
       timeout = this->CTest->GetGlobalTimeout();
     }
 
-    // Check CTEST_TEST_TIMEOUT.
-    cmDuration ctestTestTimeout = this->CTest->GetTimeOut();
-    if (ctestTestTimeout > cmDuration::zero() &&
-        (!timeout || ctestTestTimeout < *timeout)) {
-      timeout = ctestTestTimeout;
+    if (!timeout) {
+      // Check CTEST_TEST_TIMEOUT.
+      cmDuration ctestTestTimeout = this->CTest->GetTimeOut();
+      if (ctestTestTimeout > cmDuration::zero()) {
+        timeout = ctestTestTimeout;
+      }
     }
   }
 
@@ -863,24 +888,23 @@ bool cmCTestRunTest::ForkProcess()
   this->TestResult.Environment.erase(this->TestResult.Environment.length() -
                                      1);
 
-  return this->TestProcess->StartProcess(this->MultiTestHandler.Loop,
+  return this->TestProcess->StartProcess(*this->MultiTestHandler.Loop,
                                          &this->TestProperties->Affinity);
 }
 
 void cmCTestRunTest::SetupResourcesEnvironment(std::vector<std::string>* log)
 {
-  std::string processCount = "CTEST_RESOURCE_GROUP_COUNT=";
-  processCount += std::to_string(this->AllocatedResources.size());
+  std::string processCount =
+    cmStrCat("CTEST_RESOURCE_GROUP_COUNT=", this->AllocatedResources.size());
   cmSystemTools::PutEnv(processCount);
   if (log) {
-    log->push_back(processCount);
+    log->emplace_back(std::move(processCount));
   }
 
   std::size_t i = 0;
   for (auto const& process : this->AllocatedResources) {
-    std::string prefix = "CTEST_RESOURCE_GROUP_";
-    prefix += std::to_string(i);
-    std::string resourceList = prefix + '=';
+    std::string prefix = cmStrCat("CTEST_RESOURCE_GROUP_", i);
+    std::string resourceList = cmStrCat(prefix, '=');
     prefix += '_';
     bool firstType = true;
     for (auto const& it : process) {
@@ -890,14 +914,15 @@ void cmCTestRunTest::SetupResourcesEnvironment(std::vector<std::string>* log)
       firstType = false;
       auto resourceType = it.first;
       resourceList += resourceType;
-      std::string var = prefix + cmSystemTools::UpperCase(resourceType) + '=';
+      std::string var =
+        cmStrCat(prefix, cmSystemTools::UpperCase(resourceType), '=');
       bool firstName = true;
       for (auto const& it2 : it.second) {
         if (!firstName) {
           var += ';';
         }
         firstName = false;
-        var += "id:" + it2.Id + ",slots:" + std::to_string(it2.Slots);
+        var += cmStrCat("id:", it2.Id, ",slots:", it2.Slots);
       }
       cmSystemTools::PutEnv(var);
       if (log) {
@@ -950,7 +975,7 @@ void cmCTestRunTest::WriteLogOutputTop(size_t completed, size_t total)
                << indexStr.str();
   outputStream << " ";
 
-  const int maxTestNameWidth = this->CTest->GetMaxTestNameWidth();
+  int const maxTestNameWidth = this->CTest->GetMaxTestNameWidth();
   std::string outname = this->TestProperties->Name + " ";
   outname.resize(maxTestNameWidth + 4, '.');
   outputStream << outname;
@@ -991,6 +1016,14 @@ void cmCTestRunTest::WriteLogOutputTop(size_t completed, size_t total)
 
 void cmCTestRunTest::FinalizeTest(bool started)
 {
+  if (this->CTest->GetInstrumentation().HasQuery()) {
+    std::string data_file = this->CTest->GetInstrumentation().InstrumentTest(
+      this->TestProperties->Name, this->ActualCommand, this->Arguments,
+      this->TestProcess->GetExitValue(), this->TestProcess->GetStartTime(),
+      this->TestProcess->GetSystemStartTime(),
+      this->GetCTest()->GetConfigType());
+    this->TestResult.InstrumentationFile = data_file;
+  }
   this->MultiTestHandler.FinishTestProcess(this->TestProcess->GetRunner(),
                                            started);
 }

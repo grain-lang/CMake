@@ -1,6 +1,9 @@
 CMP0065
 -------
 
+.. |REMOVED_IN_CMAKE_VERSION| replace:: 4.0
+.. include:: include/REMOVED_PROLOGUE.rst
+
 .. versionadded:: 3.4
 
 Do not add flags to export symbols from executables without
@@ -20,10 +23,10 @@ The ``NEW`` behavior of this policy is to only use the additional link
 flags when linking executables if the :prop_tgt:`ENABLE_EXPORTS` target
 property is set to ``True``.
 
-This policy was introduced in CMake version 3.4.  Unlike most policies,
-CMake version |release| does *not* warn by default when this policy
-is not set and simply uses ``OLD`` behavior.  See documentation of the
-:variable:`CMAKE_POLICY_WARNING_CMP0065 <CMAKE_POLICY_WARNING_CMP<NNNN>>`
-variable to control the warning.
+.. |INTRODUCED_IN_CMAKE_VERSION| replace:: 3.4
+.. |WARNED_OR_DID_NOT_WARN| replace:: did *not* warn by default
+.. include:: include/REMOVED_EPILOGUE.rst
 
-.. include:: DEPRECATED.txt
+See documentation of the
+:variable:`CMAKE_POLICY_WARNING_CMP0065 <CMAKE_POLICY_WARNING_CMP<NNNN>>`
+variable to control the warning in CMake versions before 4.0.

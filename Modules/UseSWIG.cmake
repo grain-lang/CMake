@@ -1,5 +1,5 @@
 # Distributed under the OSI-approved BSD 3-Clause License.  See accompanying
-# file Copyright.txt or https://cmake.org/licensing for details.
+# file LICENSE.rst or https://cmake.org/licensing for details.
 
 #[=======================================================================[.rst:
 UseSWIG
@@ -21,7 +21,9 @@ The following command is defined for use with ``SWIG``:
 
   .. versionadded:: 3.8
 
-  Define swig module with given name and specified language::
+  Define swig module with given name and specified language:
+
+  .. code-block:: cmake
 
     swig_add_library(<name>
                      [TYPE <SHARED|MODULE|STATIC|USE_BUILD_SHARED_LIBS>]
@@ -188,9 +190,8 @@ ensure generated files will receive the required settings.
   itself. This property is only meaningful for
   :ref:`Makefile <Makefile Generators>`,
   :ref:`Ninja <Ninja Generators>`, :generator:`Xcode`, and
-  :ref:`Visual Studio <Visual Studio Generators>`
-  (:generator:`Visual Studio 11 2012` and above) generators. Default value is
-  ``FALSE``.
+  :ref:`Visual Studio <Visual Studio Generators>` generators.
+  Default value is ``FALSE``.
 
   .. versionadded:: 3.21
     Added the support of :generator:`Xcode` generator.
@@ -352,9 +353,8 @@ as well as ``SWIG``:
   itself. This variable is only meaningful for
   :ref:`Makefile <Makefile Generators>`,
   :ref:`Ninja <Ninja Generators>`, :generator:`Xcode`, and
-  :ref:`Visual Studio <Visual Studio Generators>`
-  (:generator:`Visual Studio 11 2012` and above) generators. Default value is
-  ``FALSE``.
+  :ref:`Visual Studio <Visual Studio Generators>` generators.
+  Default value is ``FALSE``.
 
   Source file property ``USE_SWIG_DEPENDENCIES``, if not defined, will be
   initialized with the value of this variable.
@@ -374,7 +374,9 @@ Deprecated Commands
     Use :command:`target_link_libraries` with the standard target name,
     or with ``${SWIG_MODULE_<name>_REAL_NAME}`` for legacy target naming.
 
-  Link libraries to swig module::
+  Link libraries to swig module:
+
+  .. code-block:: cmake
 
     swig_link_libraries(<name> <item>...)
 
@@ -396,10 +398,6 @@ Deprecated Commands
 #]=======================================================================]
 
 cmake_policy(PUSH)
-# numbers and boolean constants
-cmake_policy (SET CMP0012 NEW)
-# IN_LIST operator
-cmake_policy (SET CMP0057 NEW)
 # Ninja generator normalizes custom command depfile paths
 cmake_policy (SET CMP0116 NEW)
 
@@ -466,7 +464,10 @@ function(SWIG_GET_EXTRA_OUTPUT_FILES language outfiles generatedpath infile)
 
     # try to get module name from "%module foo" syntax
     if ( EXISTS "${infile}" )
+      cmake_policy(PUSH)
+      cmake_policy(SET CMP0159 NEW) # file(STRINGS) with REGEX updates CMAKE_MATCH_<n>
       file ( STRINGS "${infile}" module_basename REGEX "[ ]*%module[ ]*[a-zA-Z0-9_]+.*" )
+      cmake_policy(POP)
     endif ()
     if ( module_basename )
       string ( REGEX REPLACE "[ ]*%module[ ]*([a-zA-Z0-9_]+).*" "\\1" module_basename "${module_basename}" )
@@ -474,7 +475,10 @@ function(SWIG_GET_EXTRA_OUTPUT_FILES language outfiles generatedpath infile)
     else ()
       # try to get module name from "%module (options=...) foo" syntax
       if ( EXISTS "${infile}" )
+        cmake_policy(PUSH)
+        cmake_policy(SET CMP0159 NEW) # file(STRINGS) with REGEX updates CMAKE_MATCH_<n>
         file ( STRINGS "${infile}" module_basename REGEX "[ ]*%module[ ]*\\(.*\\)[ ]*[a-zA-Z0-9_]+.*" )
+        cmake_policy(POP)
       endif ()
       if ( module_basename )
         string ( REGEX REPLACE "[ ]*%module[ ]*\\(.*\\)[ ]*([a-zA-Z0-9_]+).*" "\\1" module_basename "${module_basename}" )
@@ -559,7 +563,7 @@ function(SWIG_ADD_SOURCE_TO_MODULE name outfiles infile)
   endif()
 
   set (use_swig_dependencies ${SWIG_USE_SWIG_DEPENDENCIES})
-  if (CMAKE_GENERATOR MATCHES "Make|Ninja|Xcode|Visual Studio (1[1-9]|[2-9][0-9])")
+  if (CMAKE_GENERATOR MATCHES "Make|Ninja|Xcode|Visual Studio")
     get_property(use_swig_dependencies_set SOURCE "${infile}" PROPERTY USE_SWIG_DEPENDENCIES SET)
     if (use_swig_dependencies_set)
       get_property(use_swig_dependencies SOURCE "${infile}" PROPERTY USE_SWIG_DEPENDENCIES)
@@ -657,7 +661,7 @@ function(SWIG_ADD_SOURCE_TO_MODULE name outfiles infile)
     if(NOT ("-dllimport" IN_LIST swig_source_file_flags OR "-dllimport" IN_LIST SWIG_MODULE_${name}_EXTRA_FLAGS))
       # This makes sure that the name used in the generated DllImport
       # matches the library name created by CMake
-      list (APPEND SWIG_MODULE_${name}_EXTRA_FLAGS "-dllimport" "$<TARGET_FILE_PREFIX:${target_name}>$<TARGET_FILE_BASE_NAME:${target_name}>")
+      list (APPEND SWIG_MODULE_${name}_EXTRA_FLAGS "-dllimport" "$<TARGET_FILE_BASE_NAME:${target_name}>")
     endif()
   endif()
   if (SWIG_MODULE_${name}_LANGUAGE STREQUAL "PYTHON" AND NOT SWIG_MODULE_${name}_NOPROXY)
@@ -884,7 +888,7 @@ function(SWIG_ADD_LIBRARY name)
     set(SWIG_SOURCE_FILE_EXTENSIONS ".i")
   endif()
 
-  if (CMAKE_GENERATOR MATCHES "Make|Ninja|Xcode|Visual Studio (1[1-9]|[2-9][0-9])")
+  if (CMAKE_GENERATOR MATCHES "Make|Ninja|Xcode|Visual Studio")
     # For Makefiles, Ninja, Xcode and Visual Studio generators,
     # use SWIG generated dependencies if requested
     if (NOT DEFINED SWIG_USE_SWIG_DEPENDENCIES)

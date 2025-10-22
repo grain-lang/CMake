@@ -1,6 +1,6 @@
 
 /* Distributed under the OSI-approved BSD 3-Clause License.  See accompanying
-   file Copyright.txt or https://cmake.org/licensing for details.  */
+   file LICENSE.rst or https://cmake.org/licensing for details.  */
 #include "cmGlobalVisualStudioGenerator.h"
 
 #include <cassert>
@@ -12,6 +12,7 @@
 
 #include <cm/iterator>
 #include <cm/memory>
+#include <cmext/string_view>
 
 #include <windows.h>
 
@@ -35,20 +36,13 @@
 #include "cmTarget.h"
 #include "cmake.h"
 
-cmGlobalVisualStudioGenerator::cmGlobalVisualStudioGenerator(
-  cmake* cm, std::string const& platformInGeneratorName)
+cmGlobalVisualStudioGenerator::cmGlobalVisualStudioGenerator(cmake* cm)
   : cmGlobalGenerator(cm)
 {
   cm->GetState()->SetIsGeneratorMultiConfig(true);
   cm->GetState()->SetWindowsShell(true);
   cm->GetState()->SetWindowsVSIDE(true);
-
-  if (platformInGeneratorName.empty()) {
-    this->DefaultPlatformName = "Win32";
-  } else {
-    this->DefaultPlatformName = platformInGeneratorName;
-    this->PlatformInGeneratorName = true;
-  }
+  this->DefaultPlatformName = "Win32";
 }
 
 cmGlobalVisualStudioGenerator::~cmGlobalVisualStudioGenerator() = default;
@@ -78,9 +72,9 @@ bool cmGlobalVisualStudioGenerator::SetGeneratorPlatform(std::string const& p,
   if (!this->InitializePlatform(mf)) {
     return false;
   }
-  if (this->GetPlatformName() == "x64") {
+  if (this->GetPlatformName() == "x64"_s) {
     mf->AddDefinition("CMAKE_FORCE_WIN64", "TRUE");
-  } else if (this->GetPlatformName() == "Itanium") {
+  } else if (this->GetPlatformName() == "Itanium"_s) {
     mf->AddDefinition("CMAKE_FORCE_IA64", "TRUE");
   }
   mf->AddDefinition("CMAKE_VS_PLATFORM_NAME", this->GetPlatformName());
@@ -92,6 +86,16 @@ bool cmGlobalVisualStudioGenerator::InitializePlatform(cmMakefile*)
   return true;
 }
 
+cmValue cmGlobalVisualStudioGenerator::GetDebuggerWorkingDirectory(
+  cmGeneratorTarget* gt) const
+{
+  if (cmValue ret = gt->GetProperty("VS_DEBUGGER_WORKING_DIRECTORY")) {
+    return ret;
+  } else {
+    return cmGlobalGenerator::GetDebuggerWorkingDirectory(gt);
+  }
+}
+
 std::string const& cmGlobalVisualStudioGenerator::GetPlatformName() const
 {
   if (!this->GeneratorPlatform.empty()) {
@@ -100,15 +104,9 @@ std::string const& cmGlobalVisualStudioGenerator::GetPlatformName() const
   return this->DefaultPlatformName;
 }
 
-const char* cmGlobalVisualStudioGenerator::GetIDEVersion() const
+char const* cmGlobalVisualStudioGenerator::GetIDEVersion() const
 {
   switch (this->Version) {
-    case cmGlobalVisualStudioGenerator::VSVersion::VS9:
-      return "9.0";
-    case cmGlobalVisualStudioGenerator::VSVersion::VS11:
-      return "11.0";
-    case cmGlobalVisualStudioGenerator::VSVersion::VS12:
-      return "12.0";
     case cmGlobalVisualStudioGenerator::VSVersion::VS14:
       return "14.0";
     case cmGlobalVisualStudioGenerator::VSVersion::VS15:
@@ -128,26 +126,6 @@ void cmGlobalVisualStudioGenerator::WriteSLNHeader(std::ostream& fout)
   fout << '\n';
 
   switch (this->Version) {
-    case cmGlobalVisualStudioGenerator::VSVersion::VS9:
-      fout << "Microsoft Visual Studio Solution File, Format Version 10.00\n";
-      fout << "# Visual Studio 2008\n";
-      break;
-    case cmGlobalVisualStudioGenerator::VSVersion::VS11:
-      fout << "Microsoft Visual Studio Solution File, Format Version 12.00\n";
-      if (this->ExpressEdition) {
-        fout << "# Visual Studio Express 2012 for Windows Desktop\n";
-      } else {
-        fout << "# Visual Studio 2012\n";
-      }
-      break;
-    case cmGlobalVisualStudioGenerator::VSVersion::VS12:
-      fout << "Microsoft Visual Studio Solution File, Format Version 12.00\n";
-      if (this->ExpressEdition) {
-        fout << "# Visual Studio Express 2013 for Windows Desktop\n";
-      } else {
-        fout << "# Visual Studio 2013\n";
-      }
-      break;
     case cmGlobalVisualStudioGenerator::VSVersion::VS14:
       // Visual Studio 14 writes .sln format 12.00
       fout << "Microsoft Visual Studio Solution File, Format Version 12.00\n";
@@ -192,10 +170,10 @@ std::string cmGlobalVisualStudioGenerator::GetRegistryBase()
   return cmGlobalVisualStudioGenerator::GetRegistryBase(this->GetIDEVersion());
 }
 
-std::string cmGlobalVisualStudioGenerator::GetRegistryBase(const char* version)
+std::string cmGlobalVisualStudioGenerator::GetRegistryBase(char const* version)
 {
-  std::string key = R"(HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\VisualStudio\)";
-  return key + version;
+  return cmStrCat(R"(HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\VisualStudio\)",
+                  version);
 }
 
 void cmGlobalVisualStudioGenerator::AddExtraIDETargets()
@@ -226,7 +204,7 @@ void cmGlobalVisualStudioGenerator::AddExtraIDETargets()
 
       // Now make all targets depend on the ALL_BUILD target
       for (cmLocalGenerator const* i : gen) {
-        for (const auto& tgt : i->GetGeneratorTargets()) {
+        for (auto const& tgt : i->GetGeneratorTargets()) {
           if (tgt->GetType() == cmStateEnums::GLOBAL_TARGET ||
               tgt->IsImported()) {
             continue;
@@ -248,26 +226,16 @@ void cmGlobalVisualStudioGenerator::ComputeTargetObjectDirectory(
   cmGeneratorTarget* gt) const
 {
   std::string dir =
-    cmStrCat(gt->LocalGenerator->GetCurrentBinaryDirectory(), '/');
-  std::string tgtDir = gt->LocalGenerator->GetTargetDirectory(gt);
-  if (!tgtDir.empty()) {
-    dir += tgtDir;
-    dir += "/";
-  }
-  const char* cd = this->GetCMakeCFGIntDir();
-  if (cd && *cd) {
-    dir += cd;
-    dir += "/";
-  }
+    cmStrCat(gt->GetSupportDirectory(), '/', this->GetCMakeCFGIntDir(), '/');
   gt->ObjectDirectory = dir;
 }
 
-bool IsVisualStudioMacrosFileRegistered(const std::string& macrosFile,
-                                        const std::string& regKeyBase,
+bool IsVisualStudioMacrosFileRegistered(std::string const& macrosFile,
+                                        std::string const& regKeyBase,
                                         std::string& nextAvailableSubKeyName);
 
-void RegisterVisualStudioMacros(const std::string& macrosFile,
-                                const std::string& regKeyBase);
+void RegisterVisualStudioMacros(std::string const& macrosFile,
+                                std::string const& regKeyBase);
 
 #define CMAKE_VSMACROS_FILENAME "CMakeVSMacros2.vsmacros"
 
@@ -284,7 +252,7 @@ void cmGlobalVisualStudioGenerator::ConfigureCMakeVisualStudioMacros()
     std::string src = cmStrCat(cmSystemTools::GetCMakeRoot(),
                                "/Templates/" CMAKE_VSMACROS_FILENAME);
 
-    std::string dst = dir + "/CMakeMacros/" CMAKE_VSMACROS_FILENAME;
+    std::string dst = cmStrCat(dir, "/CMakeMacros/" CMAKE_VSMACROS_FILENAME);
 
     // Copy the macros file to the user directory only if the
     // destination does not exist or the source location is newer.
@@ -295,8 +263,8 @@ void cmGlobalVisualStudioGenerator::ConfigureCMakeVisualStudioMacros()
     if (!cmSystemTools::FileTimeCompare(src, dst, &res) || res > 0) {
       if (!cmSystemTools::CopyFileAlways(src, dst)) {
         std::ostringstream oss;
-        oss << "Could not copy from: " << src << std::endl;
-        oss << "                 to: " << dst << std::endl;
+        oss << "Could not copy from: " << src << std::endl
+            << "                 to: " << dst << std::endl;
         cmSystemTools::Message(oss.str(), "Warning");
       }
     }
@@ -306,7 +274,7 @@ void cmGlobalVisualStudioGenerator::ConfigureCMakeVisualStudioMacros()
 }
 
 void cmGlobalVisualStudioGenerator::CallVisualStudioMacro(
-  MacroName m, const std::string& vsSolutionFile)
+  MacroName m, std::string const& vsSolutionFile)
 {
   // If any solution or project files changed during the generation,
   // tell Visual Studio to reload them...
@@ -319,7 +287,8 @@ void cmGlobalVisualStudioGenerator::CallVisualStudioMacro(
   //  - there were .sln/.vcproj files changed during generation
   //
   if (!dir.empty()) {
-    std::string macrosFile = dir + "/CMakeMacros/" CMAKE_VSMACROS_FILENAME;
+    std::string macrosFile =
+      cmStrCat(dir, "/CMakeMacros/" CMAKE_VSMACROS_FILENAME);
     std::string nextSubkeyName;
     if (cmSystemTools::FileExists(macrosFile) &&
         IsVisualStudioMacrosFileRegistered(
@@ -353,7 +322,7 @@ std::string cmGlobalVisualStudioGenerator::GetUserMacrosRegKeyBase()
 }
 
 void cmGlobalVisualStudioGenerator::FillLinkClosure(
-  const cmGeneratorTarget* target, TargetSet& linked)
+  cmGeneratorTarget const* target, TargetSet& linked)
 {
   if (linked.insert(target).second) {
     TargetDependSet const& depends = this->GetTargetDirectDepends(target);
@@ -378,7 +347,7 @@ cmGlobalVisualStudioGenerator::GetTargetLinkClosure(cmGeneratorTarget* target)
 }
 
 void cmGlobalVisualStudioGenerator::FollowLinkDepends(
-  const cmGeneratorTarget* target, std::set<const cmGeneratorTarget*>& linked)
+  cmGeneratorTarget const* target, std::set<cmGeneratorTarget const*>& linked)
 {
   if (!target->IsInBuildSystem()) {
     return;
@@ -402,8 +371,8 @@ bool cmGlobalVisualStudioGenerator::ComputeTargetDepends()
     return false;
   }
   for (auto const& it : this->ProjectMap) {
-    for (const cmLocalGenerator* i : it.second) {
-      for (const auto& ti : i->GetGeneratorTargets()) {
+    for (cmLocalGenerator const* i : it.second) {
+      for (auto const& ti : i->GetGeneratorTargets()) {
         this->ComputeVSTargetDepends(ti.get());
       }
     }
@@ -426,7 +395,7 @@ void cmGlobalVisualStudioGenerator::ComputeVSTargetDepends(
   // VS <= 7.1 has two behaviors that affect solution dependencies.
   //
   // (1) Solution-level dependencies between a linkable target and a
-  // library cause that library to be linked.  We use an intermedite
+  // library cause that library to be linked.  We use an intermediate
   // empty utility target to express the dependency.  (VS 8 and above
   // provide a project file "LinkLibraryDependencies" setting to
   // choose whether to activate this behavior.  We disable it except
@@ -499,7 +468,7 @@ bool cmGlobalVisualStudioGenerator::FindMakeProgram(cmMakefile* mf)
   // Visual Studio generators know how to lookup their build tool
   // directly instead of needing a helper module to do it, so we
   // do not actually need to put CMAKE_MAKE_PROGRAM into the cache.
-  if (cmIsOff(mf->GetDefinition("CMAKE_MAKE_PROGRAM"))) {
+  if (mf->GetDefinition("CMAKE_MAKE_PROGRAM").IsOff()) {
     mf->AddDefinition("CMAKE_MAKE_PROGRAM", this->GetVSMakeProgram());
   }
   return true;
@@ -528,17 +497,17 @@ std::string cmGlobalVisualStudioGenerator::GetStartupProjectName(
     }
     root->GetMakefile()->IssueMessage(
       MessageType::AUTHOR_WARNING,
-      "Directory property VS_STARTUP_PROJECT specifies target "
-      "'" +
-        startup + "' that does not exist.  Ignoring.");
+      cmStrCat("Directory property VS_STARTUP_PROJECT specifies target "
+               "'",
+               startup, "' that does not exist.  Ignoring."));
   }
 
   // default, if not specified
   return this->GetAllTargetName();
 }
 
-bool IsVisualStudioMacrosFileRegistered(const std::string& macrosFile,
-                                        const std::string& regKeyBase,
+bool IsVisualStudioMacrosFileRegistered(std::string const& macrosFile,
+                                        std::string const& regKeyBase,
                                         std::string& nextAvailableSubKeyName)
 {
   bool macrosRegistered = false;
@@ -556,7 +525,7 @@ bool IsVisualStudioMacrosFileRegistered(const std::string& macrosFile,
   LONG result = ERROR_SUCCESS;
   DWORD index = 0;
 
-  keyname = regKeyBase + "\\OtherProjects7";
+  keyname = cmStrCat(regKeyBase, "\\OtherProjects7");
   hkey = nullptr;
   result =
     RegOpenKeyExW(HKEY_CURRENT_USER, cmsys::Encoding::ToWide(keyname).c_str(),
@@ -648,7 +617,7 @@ bool IsVisualStudioMacrosFileRegistered(const std::string& macrosFile,
   // as the name of the next subkey.
   nextAvailableSubKeyName = std::to_string(index);
 
-  keyname = regKeyBase + "\\RecordingProject7";
+  keyname = cmStrCat(regKeyBase, "\\RecordingProject7");
   hkey = nullptr;
   result =
     RegOpenKeyExW(HKEY_CURRENT_USER, cmsys::Encoding::ToWide(keyname).c_str(),
@@ -690,11 +659,11 @@ bool IsVisualStudioMacrosFileRegistered(const std::string& macrosFile,
   return macrosRegistered;
 }
 
-void WriteVSMacrosFileRegistryEntry(const std::string& nextAvailableSubKeyName,
-                                    const std::string& macrosFile,
-                                    const std::string& regKeyBase)
+void WriteVSMacrosFileRegistryEntry(std::string const& nextAvailableSubKeyName,
+                                    std::string const& macrosFile,
+                                    std::string const& regKeyBase)
 {
-  std::string keyname = regKeyBase + "\\OtherProjects7";
+  std::string keyname = cmStrCat(regKeyBase, "\\OtherProjects7");
   HKEY hkey = nullptr;
   LONG result =
     RegOpenKeyExW(HKEY_CURRENT_USER, cmsys::Encoding::ToWide(keyname).c_str(),
@@ -753,8 +722,8 @@ void WriteVSMacrosFileRegistryEntry(const std::string& nextAvailableSubKeyName,
   }
 }
 
-void RegisterVisualStudioMacros(const std::string& macrosFile,
-                                const std::string& regKeyBase)
+void RegisterVisualStudioMacros(std::string const& macrosFile,
+                                std::string const& regKeyBase)
 {
   bool macrosRegistered;
   std::string nextAvailableSubKeyName;
@@ -829,17 +798,17 @@ bool cmGlobalVisualStudioGenerator::TargetIsFortranOnly(
   // Intel Fortran .vfproj files do support the resource compiler.
   languages.erase("RC");
 
-  return languages.size() == 1 && *languages.begin() == "Fortran";
+  return languages.size() == 1 && *languages.begin() == "Fortran"_s;
 }
 
 bool cmGlobalVisualStudioGenerator::IsInSolution(
-  const cmGeneratorTarget* gt) const
+  cmGeneratorTarget const* gt) const
 {
   return gt->IsInBuildSystem();
 }
 
 bool cmGlobalVisualStudioGenerator::IsDepInSolution(
-  const std::string& targetName) const
+  std::string const& targetName) const
 {
   return !targetName.empty();
 }
@@ -876,7 +845,7 @@ cmGlobalVisualStudioGenerator::OrderedTargetDependSet::OrderedTargetDependSet(
 }
 
 std::string cmGlobalVisualStudioGenerator::ExpandCFGIntDir(
-  const std::string& str, const std::string& config) const
+  std::string const& str, std::string const& config) const
 {
   std::string replace = GetCMakeCFGIntDir();
 
@@ -915,10 +884,10 @@ void cmGlobalVisualStudioGenerator::AddSymbolExportCommand(
   cmSystemTools::ReplaceString(obj_dir_expanded, this->GetCMakeCFGIntDir(),
                                configName.c_str());
   cmSystemTools::MakeDirectory(obj_dir_expanded);
-  std::string const objs_file = obj_dir_expanded + "/objects.txt";
+  std::string const objs_file = cmStrCat(obj_dir_expanded, "/objects.txt");
   cmGeneratedFileStream fout(objs_file.c_str());
   if (!fout) {
-    cmSystemTools::Error("could not open " + objs_file);
+    cmSystemTools::Error(cmStrCat("could not open ", objs_file));
     return;
   }
 
@@ -927,9 +896,9 @@ void cmGlobalVisualStudioGenerator::AddSymbolExportCommand(
     for (cmSourceFile const* it : objectSources) {
       // Find the object file name corresponding to this source file.
       // It must exist because we populated the mapping just above.
-      const auto& v = mapping[it];
+      auto const& v = mapping[it];
       assert(!v.empty());
-      std::string objFile = obj_dir + v;
+      std::string objFile = cmStrCat(obj_dir, v);
       objs.push_back(objFile);
     }
     std::vector<cmSourceFile const*> externalObjectSources;
@@ -981,11 +950,11 @@ static bool OpenSolution(std::string const& sln)
   return reinterpret_cast<intptr_t>(hi) > 32;
 }
 
-bool cmGlobalVisualStudioGenerator::Open(const std::string& bindir,
-                                         const std::string& projectName,
+bool cmGlobalVisualStudioGenerator::Open(std::string const& bindir,
+                                         std::string const& projectName,
                                          bool dryRun)
 {
-  std::string sln = bindir + "/" + projectName + ".sln";
+  std::string sln = cmStrCat(bindir, '/', projectName, ".sln");
 
   if (dryRun) {
     return cmSystemTools::FileExists(sln, true);

@@ -1,8 +1,9 @@
 /* Distributed under the OSI-approved BSD 3-Clause License.  See accompanying
-   file Copyright.txt or https://cmake.org/licensing for details.  */
+   file LICENSE.rst or https://cmake.org/licensing for details.  */
 #include "cmcmd.h"
 
 #include <functional>
+#include <iomanip>
 #include <iterator>
 
 #include <cm/optional>
@@ -12,22 +13,27 @@
 #include <fcntl.h>
 
 #include "cmCommandLineArgument.h"
-#include "cmConsoleBuf.h"
+#include "cmCryptoHash.h"
 #include "cmDuration.h"
 #include "cmGlobalGenerator.h"
 #include "cmList.h"
 #include "cmLocalGenerator.h"
 #include "cmMakefile.h"
+#include "cmProcessOutput.h"
 #include "cmQtAutoMocUic.h"
 #include "cmQtAutoRcc.h"
 #include "cmRange.h"
 #include "cmState.h"
 #include "cmStateDirectory.h"
 #include "cmStateSnapshot.h"
+#include "cmStdIoConsole.h"
+#include "cmStdIoStream.h"
+#include "cmStdIoTerminal.h"
 #include "cmStringAlgorithms.h"
 #include "cmSystemTools.h"
 #include "cmTransformDepfile.h"
 #include "cmUVProcessChain.h"
+#include "cmUVStream.h"
 #include "cmUtils.hxx"
 #include "cmValue.h"
 #include "cmVersion.h"
@@ -58,7 +64,6 @@
 #include <cstring>
 #include <iostream>
 #include <memory>
-#include <sstream>
 #include <utility>
 
 #ifdef _WIN32
@@ -70,111 +75,100 @@
 
 #include "cmsys/Directory.hxx"
 #include "cmsys/FStream.hxx"
-#include "cmsys/Process.h"
 #include "cmsys/RegularExpression.hxx"
-#include "cmsys/Terminal.h"
 
 int cmcmd_cmake_ninja_depends(std::vector<std::string>::const_iterator argBeg,
                               std::vector<std::string>::const_iterator argEnd);
 int cmcmd_cmake_ninja_dyndep(std::vector<std::string>::const_iterator argBeg,
                              std::vector<std::string>::const_iterator argEnd);
+int cmcmd_cmake_module_compile_db(
+  std::vector<std::string>::const_iterator argBeg,
+  std::vector<std::string>::const_iterator argEnd);
 
 namespace {
+// ATTENTION If you add new commands, change here,
+// and in `cmakemain.cxx` in the options table
+char const* const HELP_AVAILABLE_COMMANDS = R"(Available commands:
+  capabilities              - Report capabilities built into cmake in JSON format
+  cat [--] <files>...       - concat the files and print them to the standard output
+  chdir dir cmd [args...]   - run command in a given directory
+  compare_files [--ignore-eol] file1 file2
+                              - check if file1 is same as file2
+  copy <file>... destination  - copy files to destination (either file or directory)
+  copy_directory <dir>... destination   - copy content of <dir>... directories to 'destination' directory
+  copy_directory_if_different <dir>... destination   - copy changed content of <dir>... directories to 'destination' directory
+  copy_if_different <file>... destination  - copy files if it has changed
+  echo [<string>...]        - displays arguments as text
+  echo_append [<string>...] - displays arguments as text but no new line
+  env [--unset=NAME ...] [NAME=VALUE ...] [--] <command> [<arg>...]
+                            - run command in a modified environment
+  environment               - display the current environment
+  make_directory <dir>...   - create parent and <dir> directories
+  md5sum <file>...          - create MD5 checksum of files
+  sha1sum <file>...         - create SHA1 checksum of files
+  sha224sum <file>...       - create SHA224 checksum of files
+  sha256sum <file>...       - create SHA256 checksum of files
+  sha384sum <file>...       - create SHA384 checksum of files
+  sha512sum <file>...       - create SHA512 checksum of files
+  remove [-f] <file>...     - remove the file(s), use -f to force it (deprecated: use rm instead)
+  remove_directory <dir>... - remove directories and their contents (deprecated: use rm instead)
+  rename oldname newname    - rename a file or directory (on one volume)
+  rm [-rRf] [--] <file/dir>... - remove files or directories, use -f to force it, r or R to remove directories and their contents recursively
+  sleep <number>...         - sleep for given number of seconds
+  tar [cxt][vf][zjJ] file.tar [file/dir1 file/dir2 ...]
+                            - create or extract a tar or zip archive
+  time command [args...]    - run command and display elapsed time
+  touch <file>...           - touch a <file>.
+  touch_nocreate <file>...  - touch a <file> but do not create it.
+  create_symlink old new    - create a symbolic link new -> old
+  create_hardlink old new   - create a hard link new -> old
+  true                      - do nothing with an exit code of 0
+  false                     - do nothing with an exit code of 1
+)";
+#if defined(_WIN32) && !defined(__CYGWIN__)
+char const* const HELP_AVAILABLE_WINDOWS_COMMANDS =
+  R"(Available on Windows only:
+  delete_regv key           - delete registry value
+  env_vs8_wince sdkname     - displays a batch file which sets the environment for the provided Windows CE SDK installed in VS2005
+  env_vs9_wince sdkname     - displays a batch file which sets the environment for the provided Windows CE SDK installed in VS2008
+  write_regv key value      - write registry value
+)";
+#endif
+
 void CMakeCommandUsage(std::string const& program)
 {
-  std::ostringstream errorStream;
-
+  /* clang-format off */
+  std::string help_screen = cmStrCat(
 #ifndef CMAKE_BOOTSTRAP
-  /* clang-format off */
-  errorStream
-    << "cmake version " << cmVersion::GetCMakeVersion() << "\n";
-/* clang-format on */
+    "cmake version "
+  , cmVersion::GetCMakeVersion()
+  , "\n"
 #else
-  /* clang-format off */
-  errorStream
-    << "cmake bootstrap\n";
-/* clang-format on */
+    "cmake bootstrap\n"
 #endif
-  // If you add new commands, change here,
-  // and in cmakemain.cxx in the options table
-  /* clang-format off */
-  errorStream
-    << "Usage: " << program << " -E <command> [arguments...]\n"
-    << "Available commands: \n"
-    << "  capabilities              - Report capabilities built into cmake "
-       "in JSON format\n"
-    << "  cat [--] <files>...       - concat the files and print them to the "
-       "standard output\n"
-    << "  chdir dir cmd [args...]   - run command in a given directory\n"
-    << "  compare_files [--ignore-eol] file1 file2\n"
-    << "                              - check if file1 is same as file2\n"
-    << "  copy <file>... destination  - copy files to destination "
-       "(either file or directory)\n"
-    << "  copy_directory <dir>... destination   - copy content of <dir>... "
-       "directories to 'destination' directory\n"
-    << "  copy_directory_if_different <dir>... destination   - copy changed content of <dir>... "
-       "directories to 'destination' directory\n"
-    << "  copy_if_different <file>... destination  - copy files if it has "
-       "changed\n"
-    << "  echo [<string>...]        - displays arguments as text\n"
-    << "  echo_append [<string>...] - displays arguments as text but no new "
-       "line\n"
-    << "  env [--unset=NAME ...] [NAME=VALUE ...] [--] <command> [<arg>...]\n"
-    << "                            - run command in a modified environment\n"
-    << "  environment               - display the current environment\n"
-    << "  make_directory <dir>...   - create parent and <dir> directories\n"
-    << "  md5sum <file>...          - create MD5 checksum of files\n"
-    << "  sha1sum <file>...         - create SHA1 checksum of files\n"
-    << "  sha224sum <file>...       - create SHA224 checksum of files\n"
-    << "  sha256sum <file>...       - create SHA256 checksum of files\n"
-    << "  sha384sum <file>...       - create SHA384 checksum of files\n"
-    << "  sha512sum <file>...       - create SHA512 checksum of files\n"
-    << "  remove [-f] <file>...     - remove the file(s), use -f to force "
-       "it (deprecated: use rm instead)\n"
-    << "  remove_directory <dir>... - remove directories and their contents (deprecated: use rm instead)\n"
-    << "  rename oldname newname    - rename a file or directory "
-       "(on one volume)\n"
-    << "  rm [-rRf] [--] <file/dir>... - remove files or directories, use -f "
-       "to force it, r or R to remove directories and their contents "
-       "recursively\n"
-    << "  sleep <number>...         - sleep for given number of seconds\n"
-    << "  tar [cxt][vf][zjJ] file.tar [file/dir1 file/dir2 ...]\n"
-    << "                            - create or extract a tar or zip archive\n"
-    << "  time command [args...]    - run command and display elapsed time\n"
-    << "  touch <file>...           - touch a <file>.\n"
-    << "  touch_nocreate <file>...  - touch a <file> but do not create it.\n"
-    << "  create_symlink old new    - create a symbolic link new -> old\n"
-    << "  create_hardlink old new   - create a hard link new -> old\n"
-    << "  true                      - do nothing with an exit code of 0\n"
-    << "  false                     - do nothing with an exit code of 1\n"
+    "Usage: "
+  , program
+  , " -E <command> [arguments...]\n"
+  , HELP_AVAILABLE_COMMANDS
 #if defined(_WIN32) && !defined(__CYGWIN__)
-    << "Available on Windows only:\n"
-    << "  delete_regv key           - delete registry value\n"
-    << "  env_vs8_wince sdkname     - displays a batch file which sets the "
-       "environment for the provided Windows CE SDK installed in VS2005\n"
-    << "  env_vs9_wince sdkname     - displays a batch file which sets the "
-       "environment for the provided Windows CE SDK installed in VS2008\n"
-    << "  write_regv key value      - write registry value\n"
+  , HELP_AVAILABLE_WINDOWS_COMMANDS
 #endif
-    ;
+  );
   /* clang-format on */
-
-  cmSystemTools::Error(errorStream.str());
+  cmSystemTools::Error(help_screen);
 }
 
 bool cmTarFilesFrom(std::string const& file, std::vector<std::string>& files)
 {
   if (cmSystemTools::FileIsDirectory(file)) {
-    std::ostringstream e;
-    e << "-E tar --files-from= file '" << file << "' is a directory";
-    cmSystemTools::Error(e.str());
+    cmSystemTools::Error(
+      cmStrCat("-E tar --files-from= file '", file, "' is a directory"));
     return false;
   }
   cmsys::ifstream fin(file.c_str());
   if (!fin) {
-    std::ostringstream e;
-    e << "-E tar --files-from= file '" << file << "' not found";
-    cmSystemTools::Error(e.str());
+    cmSystemTools::Error(
+      cmStrCat("-E tar --files-from= file '", file, "' not found"));
     return false;
   }
   std::string line;
@@ -185,10 +179,8 @@ bool cmTarFilesFrom(std::string const& file, std::vector<std::string>& files)
     if (cmHasLiteralPrefix(line, "--add-file=")) {
       files.push_back(line.substr(11));
     } else if (cmHasLiteralPrefix(line, "-")) {
-      std::ostringstream e;
-      e << "-E tar --files-from='" << file << "' file invalid line:\n"
-        << line << "\n";
-      cmSystemTools::Error(e.str());
+      cmSystemTools::Error(cmStrCat("-E tar --files-from='", file,
+                                    "' file invalid line:\n", line, '\n'));
       return false;
     } else {
       files.push_back(line);
@@ -197,17 +189,22 @@ bool cmTarFilesFrom(std::string const& file, std::vector<std::string>& files)
   return true;
 }
 
-void cmCatFile(const std::string& fileToAppend)
+void cmCatFile(std::string const& fileToAppend)
 {
 #ifdef _WIN32
+  _setmode(fileno(stdin), _O_BINARY);
   _setmode(fileno(stdout), _O_BINARY);
 #endif
-  cmsys::ifstream source(fileToAppend.c_str(),
-                         (std::ios::binary | std::ios::in));
-  std::cout << source.rdbuf();
+  std::streambuf* buf = std::cin.rdbuf();
+  cmsys::ifstream source;
+  if (fileToAppend != "-") {
+    source.open(fileToAppend.c_str(), (std::ios::binary | std::ios::in));
+    buf = source.rdbuf();
+  }
+  std::cout << buf;
 }
 
-bool cmRemoveDirectory(const std::string& dir, bool recursive = true)
+bool cmRemoveDirectory(std::string const& dir, bool recursive = true)
 {
   if (cmSystemTools::FileIsSymlink(dir)) {
     if (!cmSystemTools::RemoveFile(dir)) {
@@ -246,7 +243,7 @@ private:
       cmSystemTools::ConvertToLongPath(path);
       this->DepFile << cmCMakePath(path).GenericString() << std::endl;
     } else {
-      this->Output << this->Line << std::endl << std::flush;
+      this->Output << this->Line << std::endl;
     }
 
     return true;
@@ -272,7 +269,7 @@ public:
   }
 };
 
-int CLCompileAndDependencies(const std::vector<std::string>& args)
+int CLCompileAndDependencies(std::vector<std::string> const& args)
 {
   std::string depFile;
   std::string currentBinaryDir;
@@ -293,14 +290,8 @@ int CLCompileAndDependencies(const std::vector<std::string>& args)
     }
   }
 
-  std::unique_ptr<cmsysProcess, void (*)(cmsysProcess*)> cp(
-    cmsysProcess_New(), cmsysProcess_Delete);
-  std::vector<const char*> argv(command.size() + 1);
-  std::transform(command.begin(), command.end(), argv.begin(),
-                 [](std::string const& s) { return s.c_str(); });
-  argv.back() = nullptr;
-  cmsysProcess_SetCommand(cp.get(), argv.data());
-  cmsysProcess_SetWorkingDirectory(cp.get(), currentBinaryDir.c_str());
+  cmUVProcessChainBuilder builder;
+  builder.AddCommand(command).SetWorkingDirectory(currentBinaryDir);
 
   cmsys::ofstream fout(depFile.c_str());
   if (!fout) {
@@ -311,22 +302,18 @@ int CLCompileAndDependencies(const std::vector<std::string>& args)
   CLOutputLogger errLogger(std::cerr);
 
   // Start the process.
-  cmProcessTools::RunProcess(cp.get(), &includeParser, &errLogger);
+  auto result =
+    cmProcessTools::RunProcess(builder, &includeParser, &errLogger);
+  auto const& subStatus = result.front();
 
   int status = 0;
   // handle status of process
-  switch (cmsysProcess_GetState(cp.get())) {
-    case cmsysProcess_State_Exited:
-      status = cmsysProcess_GetExitValue(cp.get());
-      break;
-    case cmsysProcess_State_Exception:
-      status = 1;
-      break;
-    case cmsysProcess_State_Error:
-      status = 2;
-      break;
-    default:
-      break;
+  if (subStatus.SpawnResult != 0) {
+    status = 2;
+  } else if (subStatus.TermSignal != 0) {
+    status = 1;
+  } else {
+    status = static_cast<int>(subStatus.ExitStatus);
   }
 
   if (status != 0) {
@@ -339,8 +326,8 @@ int CLCompileAndDependencies(const std::vector<std::string>& args)
 }
 #endif
 
-int HandleIWYU(const std::string& runCmd, const std::string& /* sourceFile */,
-               const std::vector<std::string>& orig_cmd)
+int HandleIWYU(std::string const& runCmd, std::string const& /* sourceFile */,
+               std::vector<std::string> const& orig_cmd)
 {
   // Construct the iwyu command line by taking what was given
   // and adding all the arguments we give to the compiler.
@@ -351,14 +338,14 @@ int HandleIWYU(const std::string& runCmd, const std::string& /* sourceFile */,
   int ret;
   if (!cmSystemTools::RunSingleCommand(iwyu_cmd, nullptr, &stdErr, &ret,
                                        nullptr, cmSystemTools::OUTPUT_NONE)) {
-    std::cerr << "Error running '" << iwyu_cmd[0] << "': " << stdErr << "\n";
+    std::cerr << "Error running '" << iwyu_cmd[0] << "': " << stdErr << '\n';
     return 1;
   }
   // Warn if iwyu reported anything.
   if (stdErr.find("should remove these lines:") != std::string::npos ||
       stdErr.find("should add these lines:") != std::string::npos) {
     std::cerr << "Warning: include-what-you-use reported diagnostics:\n"
-              << stdErr << "\n";
+              << stdErr << '\n';
   }
   // Older versions of iwyu always returned a non-zero exit code,
   // so ignore it unless the user has enabled errors.
@@ -371,8 +358,8 @@ int HandleIWYU(const std::string& runCmd, const std::string& /* sourceFile */,
   return errors_enabled ? ret : 0;
 }
 
-int HandleTidy(const std::string& runCmd, const std::string& sourceFile,
-               const std::vector<std::string>& orig_cmd)
+int HandleTidy(std::string const& runCmd, std::string const& sourceFile,
+               std::vector<std::string> const& orig_cmd)
 {
   cmList tidy_cmd{ runCmd, cmList::EmptyElements::Yes };
   tidy_cmd.push_back(sourceFile);
@@ -407,7 +394,7 @@ int HandleTidy(const std::string& runCmd, const std::string& sourceFile,
   std::string stdErr;
   if (!cmSystemTools::RunSingleCommand(tidy_cmd, &stdOut, &stdErr, &ret,
                                        nullptr, cmSystemTools::OUTPUT_NONE)) {
-    std::cerr << "Error running '" << tidy_cmd[0] << "': " << stdErr << "\n";
+    std::cerr << "Error running '" << tidy_cmd[0] << "': " << stdErr << '\n';
     return 1;
   }
   // Output the stdout from clang-tidy to stderr
@@ -419,8 +406,8 @@ int HandleTidy(const std::string& runCmd, const std::string& sourceFile,
   return ret;
 }
 
-int HandleLWYU(const std::string& runCmd, const std::string& sourceFile,
-               const std::vector<std::string>&)
+int HandleLWYU(std::string const& runCmd, std::string const& sourceFile,
+               std::vector<std::string> const&)
 {
   // Construct the ldd -r -u (link what you use lwyu) command line
   // ldd -u -r lwuy target
@@ -436,7 +423,7 @@ int HandleLWYU(const std::string& runCmd, const std::string& sourceFile,
   int ret;
   if (!cmSystemTools::RunSingleCommand(lwyu_cmd, &stdOut, &stdErr, &ret,
                                        nullptr, cmSystemTools::OUTPUT_NONE)) {
-    std::cerr << "Error running '" << lwyu_cmd[0] << "': " << stdErr << "\n";
+    std::cerr << "Error running '" << lwyu_cmd[0] << "': " << stdErr << '\n';
     return 1;
   }
 
@@ -448,8 +435,8 @@ int HandleLWYU(const std::string& runCmd, const std::string& sourceFile,
   return 0;
 }
 
-int HandleCppLint(const std::string& runCmd, const std::string& sourceFile,
-                  const std::vector<std::string>&)
+int HandleCppLint(std::string const& runCmd, std::string const& sourceFile,
+                  std::vector<std::string> const&)
 {
   // Construct the cpplint command line.
   cmList cpplint_cmd{ runCmd, cmList::EmptyElements::Yes };
@@ -461,13 +448,13 @@ int HandleCppLint(const std::string& runCmd, const std::string& sourceFile,
   if (!cmSystemTools::RunSingleCommand(cpplint_cmd, &stdOut, &stdOut, &ret,
                                        nullptr, cmSystemTools::OUTPUT_NONE)) {
     std::cerr << "Error running '" << cpplint_cmd[0] << "': " << stdOut
-              << "\n";
+              << '\n';
     return 1;
   }
   if (!stdOut.empty()) {
-    std::cerr << "Warning: cpplint diagnostics:\n";
-    // Output the output from cpplint to stderr
-    std::cerr << stdOut;
+    std::cerr << "Warning: cpplint diagnostics:\n"
+              // Output the output from cpplint to stderr
+              << stdOut;
   }
 
   // always return 0 so the build can continue as cpplint returns non-zero
@@ -475,8 +462,8 @@ int HandleCppLint(const std::string& runCmd, const std::string& sourceFile,
   return 0;
 }
 
-int HandleCppCheck(const std::string& runCmd, const std::string& sourceFile,
-                   const std::vector<std::string>& orig_cmd)
+int HandleCppCheck(std::string const& runCmd, std::string const& sourceFile,
+                   std::vector<std::string> const& orig_cmd)
 {
   // Construct the cpplint command line.
   cmList cppcheck_cmd{ runCmd, cmList::EmptyElements::Yes };
@@ -507,7 +494,7 @@ int HandleCppCheck(const std::string& runCmd, const std::string& sourceFile,
   if (!cmSystemTools::RunSingleCommand(cppcheck_cmd, &stdOut, &stdErr, &ret,
                                        nullptr, cmSystemTools::OUTPUT_NONE)) {
     std::cerr << "Error running '" << cppcheck_cmd[0] << "': " << stdOut
-              << "\n";
+              << '\n';
     return 1;
   }
   std::cerr << stdOut;
@@ -529,20 +516,70 @@ int HandleCppCheck(const std::string& runCmd, const std::string& sourceFile,
   return ret;
 }
 
-using CoCompileHandler = int (*)(const std::string&, const std::string&,
-                                 const std::vector<std::string>&);
+int HandleIcstat(std::string const& runCmd, std::string const& sourceFile,
+                 std::vector<std::string> const& orig_cmd)
+{
+  // Construct the IAR C-STAT command line.
+  cmList icstat_cmd{ runCmd, cmList::EmptyElements::Yes };
+  std::string icstat_analyze{ "analyze" };
+  std::string icstat_dashdash{ "--" };
+  std::string stdOut;
+  std::string stdErr;
+  int ret;
+
+  icstat_cmd.push_back(icstat_analyze);
+  icstat_cmd.push_back(sourceFile);
+  icstat_cmd.push_back(icstat_dashdash);
+
+  for (auto const& cmd : orig_cmd) {
+    icstat_cmd.push_back(cmd);
+  }
+
+  // Create the default manifest ruleset file when not found
+  if (!cmSystemTools::FileExists("cstat_sel_checks.txt")) {
+    std::string ichecks_cmd = cmSystemTools::GetFilenamePath(orig_cmd[0]);
+    ichecks_cmd = cmStrCat(ichecks_cmd, "/ichecks --default stdchecks");
+    if (!cmSystemTools::RunSingleCommand(ichecks_cmd, &stdOut, &stdErr, &ret,
+                                         nullptr,
+                                         cmSystemTools::OUTPUT_NONE)) {
+      std::cerr << "Error generating default manifest file '" << ichecks_cmd
+                << "'. " << stdOut << '\n';
+      return 1;
+    }
+  }
+
+  // Run the IAR C-STAT command line. Capture its output.
+  if (!cmSystemTools::RunSingleCommand(icstat_cmd, &stdOut, &stdErr, &ret,
+                                       nullptr, cmSystemTools::OUTPUT_NONE)) {
+    std::cerr << "Error running '" << icstat_cmd[0] << "': " << stdOut << '\n';
+    return 1;
+  }
+  if (ret == 0) {
+    std::cerr << "Warning: C-STAT static analysis reported diagnostics:\n";
+  } else {
+    std::cerr << "Error: C-STAT static analysis reported failure:\n";
+  }
+  std::cerr << stdOut;
+  std::cerr << stdErr;
+
+  return ret;
+}
+
+using CoCompileHandler = int (*)(std::string const&, std::string const&,
+                                 std::vector<std::string> const&);
 
 struct CoCompiler
 {
-  const char* Option;
+  char const* Option;
   CoCompileHandler Handler;
   bool NoOriginalCommand;
 };
 
-const std::array<CoCompiler, 5> CoCompilers = {
+std::array<CoCompiler, 6> const CoCompilers = {
   { // Table of options and handlers.
     { "--cppcheck=", HandleCppCheck, false },
     { "--cpplint=", HandleCppLint, false },
+    { "--icstat=", HandleIcstat, false },
     { "--iwyu=", HandleIWYU, false },
     { "--lwyu=", HandleLWYU, true },
     { "--tidy=", HandleTidy, false } }
@@ -597,7 +634,7 @@ int cmcmd::HandleCoCompileCommands(std::vector<std::string> const& args)
         } else {
           // if it was not a co-compiler or --source/--launcher then error
           std::cerr << "__run_co_compile given unknown argument: " << arg
-                    << "\n";
+                    << '\n';
           return 1;
         }
       }
@@ -609,7 +646,7 @@ int cmcmd::HandleCoCompileCommands(std::vector<std::string> const& args)
     std::cerr << "__run_co_compile missing command to run. "
                  "Looking for one or more of the following:\n";
     for (CoCompiler const& cc : CoCompilers) {
-      std::cerr << cc.Option << "\n";
+      std::cerr << cc.Option << '\n';
     }
     return 1;
   }
@@ -654,14 +691,14 @@ int cmcmd::HandleCoCompileCommands(std::vector<std::string> const& args)
 }
 
 int cmcmd::ExecuteCMakeCommand(std::vector<std::string> const& args,
-                               std::unique_ptr<cmConsoleBuf> consoleBuf)
+                               cm::optional<cm::StdIo::Console> console)
 {
   // IF YOU ADD A NEW COMMAND, DOCUMENT IT ABOVE and in cmakemain.cxx
   if (args.size() > 1) {
     // Copy file
     if (args[1] == "copy" && args.size() > 3) {
       using CommandArgument =
-        cmCommandLineArgument<bool(const std::string& value)>;
+        cmCommandLineArgument<bool(std::string const& value)>;
 
       cm::optional<std::string> targetArg;
       std::vector<CommandArgument> argParsers{
@@ -671,7 +708,7 @@ int cmcmd::ExecuteCMakeCommand(std::vector<std::string> const& args,
 
       std::vector<std::string> files;
       for (decltype(args.size()) i = 2; i < args.size(); i++) {
-        const std::string& arg = args[i];
+        std::string const& arg = args[i];
         bool matched = false;
         for (auto const& m : argParsers) {
           if (m.matches(arg)) {
@@ -747,7 +784,7 @@ int cmcmd::ExecuteCMakeCommand(std::vector<std::string> const& args,
         args.size() > 3) {
       // If error occurs we want to continue copying next files.
       bool return_value = false;
-      const bool copy_always = (args[1] == "copy_directory");
+      bool const copy_always = (args[1] == "copy_directory");
       for (auto const& arg : cmMakeRange(args).advance(2).retreat(1)) {
         if (!cmSystemTools::CopyADirectory(arg, args.back(), copy_always)) {
           std::cerr << "Error copying directory from \"" << arg << "\" to \""
@@ -796,7 +833,7 @@ int cmcmd::ExecuteCMakeCommand(std::vector<std::string> const& args,
       }
       cmsys::ifstream fin(args[3].c_str(), std::ios::in | std::ios::binary);
       if (!fin) {
-        std::cerr << "could not open object list file: " << args[3] << "\n";
+        std::cerr << "could not open object list file: " << args[3] << '\n';
         return 1;
       }
       std::vector<std::string> files;
@@ -819,7 +856,7 @@ int cmcmd::ExecuteCMakeCommand(std::vector<std::string> const& args,
       }
       FILE* fout = cmsys::SystemTools::Fopen(args[2], "w+");
       if (!fout) {
-        std::cerr << "could not open output .def file: " << args[2] << "\n";
+        std::cerr << "could not open output .def file: " << args[2] << '\n';
         return 1;
       }
       bindexplib deffile;
@@ -828,7 +865,7 @@ int cmcmd::ExecuteCMakeCommand(std::vector<std::string> const& args,
         if (cmHasLiteralPrefix(a, "--nm=")) {
           deffile.SetNmPath(a.substr(5));
         } else {
-          std::cerr << "unknown argument: " << a << "\n";
+          std::cerr << "unknown argument: " << a << '\n';
         }
       }
       for (std::string const& file : files) {
@@ -1025,8 +1062,8 @@ int cmcmd::ExecuteCMakeCommand(std::vector<std::string> const& args,
           // Complain if the -f option was not given and
           // either file does not exist or
           // file could not be removed and still exists
-          bool file_exists_or_forced_remove = cmSystemTools::FileExists(arg) ||
-            cmSystemTools::FileIsSymlink(arg) || force;
+          bool file_exists_or_forced_remove =
+            cmSystemTools::PathExists(arg) || force;
           if (cmSystemTools::FileIsDirectory(arg)) {
             if (!cmRemoveDirectory(arg, recursive)) {
               return_value = 1;
@@ -1056,8 +1093,7 @@ int cmcmd::ExecuteCMakeCommand(std::vector<std::string> const& args,
     if (args[1] == "touch" && args.size() > 2) {
       for (auto const& arg : cmMakeRange(args).advance(2)) {
         if (!cmSystemTools::Touch(arg, true)) {
-          std::cerr << "cmake -E touch: failed to update \"";
-          std::cerr << arg << "\".\n";
+          std::cerr << "cmake -E touch: failed to update \"" << arg << "\".\n";
           return 1;
         }
       }
@@ -1068,8 +1104,8 @@ int cmcmd::ExecuteCMakeCommand(std::vector<std::string> const& args,
     if (args[1] == "touch_nocreate" && args.size() > 2) {
       for (auto const& arg : cmMakeRange(args).advance(2)) {
         if (!cmSystemTools::Touch(arg, false)) {
-          std::cerr << "cmake -E touch_nocreate: failed to update \"";
-          std::cerr << arg << "\".\n";
+          std::cerr << "cmake -E touch_nocreate: failed to update \"" << arg
+                    << "\".\n";
           return 1;
         }
       }
@@ -1114,11 +1150,12 @@ int cmcmd::ExecuteCMakeCommand(std::vector<std::string> const& args,
 
       int ret = 0;
       auto time_start = std::chrono::steady_clock::now();
-      cmSystemTools::RunSingleCommand(command, nullptr, nullptr, &ret);
+      cmSystemTools::RunSingleCommand(command, nullptr, nullptr, &ret, nullptr,
+                                      cmSystemTools::OUTPUT_PASSTHROUGH);
       auto time_finish = std::chrono::steady_clock::now();
 
       std::chrono::duration<double> time_elapsed = time_finish - time_start;
-      std::cout << "Elapsed time (seconds): " << time_elapsed.count() << "\n";
+      std::cout << "Elapsed time (seconds): " << time_elapsed.count() << '\n';
       return ret;
     }
 
@@ -1153,7 +1190,12 @@ int cmcmd::ExecuteCMakeCommand(std::vector<std::string> const& args,
       int return_value = 0;
       bool doing_options = true;
       for (auto const& arg : cmMakeRange(args).advance(2)) {
-        if (doing_options && cmHasLiteralPrefix(arg, "-")) {
+        if (arg == "-") {
+          doing_options = false;
+          // Destroy console buffers to drop cout/cerr encoding transform.
+          console.reset();
+          cmCatFile(arg);
+        } else if (doing_options && cmHasLiteralPrefix(arg, "-")) {
           if (arg == "--") {
             doing_options = false;
           } else {
@@ -1175,7 +1217,7 @@ int cmcmd::ExecuteCMakeCommand(std::vector<std::string> const& args,
           // Ignore empty files, this is not an error
         } else {
           // Destroy console buffers to drop cout/cerr encoding transform.
-          consoleBuf.reset();
+          console.reset();
           cmCatFile(arg);
         }
       }
@@ -1245,13 +1287,12 @@ int cmcmd::ExecuteCMakeCommand(std::vector<std::string> const& args,
     // supporting them.
     if (args[1] == "create_symlink" && args.size() == 4) {
       std::string const& destinationFileName = args[3];
-      if ((cmSystemTools::FileExists(destinationFileName) ||
-           cmSystemTools::FileIsSymlink(destinationFileName)) &&
+      if (cmSystemTools::PathExists(destinationFileName) &&
           !cmSystemTools::RemoveFile(destinationFileName)) {
         std::string emsg = cmSystemTools::GetLastSystemError();
         std::cerr << "failed to create symbolic link '" << destinationFileName
                   << "' because existing path cannot be removed: " << emsg
-                  << "\n";
+                  << '\n';
         return 1;
       }
       if (!cmSystemTools::CreateSymlink(args[2], destinationFileName)) {
@@ -1268,17 +1309,16 @@ int cmcmd::ExecuteCMakeCommand(std::vector<std::string> const& args,
 
       if (!cmSystemTools::FileExists(sourceFileName)) {
         std::cerr << "failed to create hard link because source path '"
-                  << sourceFileName << "' does not exist \n";
+                  << sourceFileName << "' does not exist\n";
         return 1;
       }
 
-      if ((cmSystemTools::FileExists(destinationFileName) ||
-           cmSystemTools::FileIsSymlink(destinationFileName)) &&
+      if (cmSystemTools::PathExists(destinationFileName) &&
           !cmSystemTools::RemoveFile(destinationFileName)) {
         std::string emsg = cmSystemTools::GetLastSystemError();
         std::cerr << "failed to create hard link '" << destinationFileName
                   << "' because existing path cannot be removed: " << emsg
-                  << "\n";
+                  << '\n';
         return 1;
       }
 
@@ -1310,7 +1350,7 @@ int cmcmd::ExecuteCMakeCommand(std::vector<std::string> const& args,
 
     // Internal CMake dependency scanning support.
     if (args[1] == "cmake_depends" && args.size() >= 6) {
-      const bool verbose = isCMakeVerbose();
+      bool const verbose = isCMakeVerbose();
 
       // Create a cmake object instance to process dependencies.
       // All we need is the `set` command.
@@ -1360,10 +1400,10 @@ int cmcmd::ExecuteCMakeCommand(std::vector<std::string> const& args,
 
       // Create a local generator configured for the directory in
       // which dependencies will be scanned.
-      homeDir = cmSystemTools::CollapseFullPath(homeDir);
-      startDir = cmSystemTools::CollapseFullPath(startDir);
-      homeOutDir = cmSystemTools::CollapseFullPath(homeOutDir);
-      startOutDir = cmSystemTools::CollapseFullPath(startOutDir);
+      homeDir = cmSystemTools::ToNormalizedPathOnDisk(homeDir);
+      startDir = cmSystemTools::ToNormalizedPathOnDisk(startDir);
+      homeOutDir = cmSystemTools::ToNormalizedPathOnDisk(homeOutDir);
+      startOutDir = cmSystemTools::ToNormalizedPathOnDisk(startOutDir);
       cm.SetHomeDirectory(homeDir);
       cm.SetHomeOutputDirectory(homeOutDir);
       cm.GetCurrentSnapshot().SetDefaultDefinitions();
@@ -1410,22 +1450,27 @@ int cmcmd::ExecuteCMakeCommand(std::vector<std::string> const& args,
     }
 #endif
 
+    // Internal CMake C++ module compilation database support.
+    if (args[1] == "cmake_module_compile_db") {
+      return cmcmd_cmake_module_compile_db(args.begin() + 2, args.end());
+    }
+
     // Internal CMake unimplemented feature notification.
     if (args[1] == "cmake_unimplemented_variable") {
       std::cerr << "Feature not implemented for this platform.";
       if (args.size() == 3) {
         std::cerr << "  Variable " << args[2] << " is not set.";
       }
-      std::cerr << std::endl;
+      std::cerr << '\n';
       return 1;
     }
 
     if (args[1] == "vs_link_exe") {
-      return cmcmd::VisualStudioLink(args, 1);
+      return cmcmd::VisualStudioLink(args, 1, std::move(console));
     }
 
     if (args[1] == "vs_link_dll") {
-      return cmcmd::VisualStudioLink(args, 2);
+      return cmcmd::VisualStudioLink(args, 2, std::move(console));
     }
 
     if (args[1] == "cmake_llvm_rc") {
@@ -1441,19 +1486,23 @@ int cmcmd::ExecuteCMakeCommand(std::vector<std::string> const& args,
     if ((args[1] == "cmake_autogen") && (args.size() >= 4)) {
       cm::string_view const infoFile = args[2];
       cm::string_view const config = args[3];
-      return cmQtAutoMocUic(infoFile, config) ? 0 : 1;
+      cm::string_view const executableConfig =
+        (args.size() >= 5) ? cm::string_view(args[4]) : cm::string_view();
+      return cmQtAutoMocUic(infoFile, config, executableConfig) ? 0 : 1;
     }
     if ((args[1] == "cmake_autorcc") && (args.size() >= 3)) {
       cm::string_view const infoFile = args[2];
       cm::string_view const config =
         (args.size() > 3) ? cm::string_view(args[3]) : cm::string_view();
-      return cmQtAutoRcc(infoFile, config) ? 0 : 1;
+      cm::string_view const executableConfig =
+        (args.size() >= 5) ? cm::string_view(args[4]) : cm::string_view();
+      return cmQtAutoRcc(infoFile, config, executableConfig) ? 0 : 1;
     }
 #endif
 
     // Tar files
     if (args[1] == "tar" && args.size() > 3) {
-      const char* knownFormats[] = { "7zip", "gnutar", "pax", "paxr", "zip" };
+      char const* knownFormats[] = { "7zip", "gnutar", "pax", "paxr", "zip" };
 
       std::string const& flags = args[2];
       std::string const& outFile = args[3];
@@ -1531,7 +1580,7 @@ int cmcmd::ExecuteCMakeCommand(std::vector<std::string> const& args,
             action = cmSystemTools::TarActionExtract;
           } break;
           default: {
-            std::cerr << "tar: Unknown argument: " << flag << "\n";
+            std::cerr << "tar: Unknown argument: " << flag << '\n';
           }
         }
       }
@@ -1554,8 +1603,8 @@ int cmcmd::ExecuteCMakeCommand(std::vector<std::string> const& args,
         if (files.empty()) {
           std::cerr << "tar: No files or directories specified\n";
         }
-        if (!cmSystemTools::CreateTar(outFile, files, compress, verbose, mtime,
-                                      format)) {
+        if (!cmSystemTools::CreateTar(outFile, files, {}, compress, verbose,
+                                      mtime, format)) {
           cmSystemTools::Error("Problem creating tar: " + outFile);
           return 1;
         }
@@ -1647,10 +1696,10 @@ int cmcmd::ExecuteCMakeCommand(std::vector<std::string> const& args,
       std::string startDir;
       std::string homeOutDir;
       std::string startOutDir;
-      homeDir = cmSystemTools::CollapseFullPath(args[4]);
-      startDir = cmSystemTools::CollapseFullPath(args[5]);
-      homeOutDir = cmSystemTools::CollapseFullPath(args[6]);
-      startOutDir = cmSystemTools::CollapseFullPath(args[7]);
+      homeDir = cmSystemTools::ToNormalizedPathOnDisk(args[4]);
+      startDir = cmSystemTools::ToNormalizedPathOnDisk(args[5]);
+      homeOutDir = cmSystemTools::ToNormalizedPathOnDisk(args[6]);
+      startOutDir = cmSystemTools::ToNormalizedPathOnDisk(args[7]);
       cm.SetHomeDirectory(homeDir);
       cm.SetHomeOutputDirectory(homeOutDir);
       cm.GetCurrentSnapshot().SetDefaultDefinitions();
@@ -1688,20 +1737,17 @@ int cmcmd::HashSumFile(std::vector<std::string> const& args,
   for (auto const& filename : cmMakeRange(args).advance(2)) {
     // Cannot compute sum of a directory
     if (cmSystemTools::FileIsDirectory(filename)) {
-      std::cerr << "Error: " << filename << " is a directory" << std::endl;
+      std::cerr << "Error: " << filename << " is a directory\n";
       retval++;
     } else {
-      std::string value
-#ifndef CMAKE_BOOTSTRAP
-        = cmSystemTools::ComputeFileHash(filename, algo)
-#endif
-        ;
+      cmCryptoHash hasher(algo);
+      std::string value = hasher.HashFile(filename);
       if (value.empty()) {
         // To mimic "md5sum/shasum" behavior in a shell:
-        std::cerr << filename << ": No such file or directory" << std::endl;
+        std::cerr << filename << ": No such file or directory\n";
         retval++;
       } else {
-        std::cout << value << "  " << filename << std::endl;
+        std::cout << value << "  " << filename << '\n';
       }
     }
   }
@@ -1755,7 +1801,7 @@ int cmcmd::SymlinkExecutable(std::vector<std::string> const& args)
 cmsys::Status cmcmd::SymlinkInternal(std::string const& file,
                                      std::string const& link)
 {
-  if (cmSystemTools::FileExists(link) || cmSystemTools::FileIsSymlink(link)) {
+  if (cmSystemTools::PathExists(link)) {
     cmSystemTools::RemoveFile(link);
   }
   std::string linktext = cmSystemTools::GetFilenameName(file);
@@ -1794,8 +1840,8 @@ static void cmcmdProgressReport(std::string const& dir, std::string const& num)
   }
   fclose(progFile);
 
-  const char* last = num.c_str();
-  for (const char* c = last;; ++c) {
+  char const* last = num.c_str();
+  for (char const* c = last;; ++c) {
     if (*c == ',' || *c == '\0') {
       if (c != last) {
         fName = cmStrCat(dirName, '/');
@@ -1815,8 +1861,8 @@ static void cmcmdProgressReport(std::string const& dir, std::string const& num)
   int fileNum =
     static_cast<int>(cmsys::Directory::GetNumberOfFilesInDirectory(dirName));
   if (count > 0) {
-    // print the progress
-    fprintf(stdout, "[%3i%%] ", ((fileNum - 3) * 100) / count);
+    int const percent = ((fileNum - 3) * 100) / count;
+    std::cout << '[' << std::setw(3) << percent << "%] ";
   }
 }
 
@@ -1827,7 +1873,8 @@ int cmcmd::ExecuteEchoColor(std::vector<std::string> const& args)
   //   args[1] == cmake_echo_color
 
   bool enabled = true;
-  int color = cmsysTerminal_Color_Normal;
+  static cm::StdIo::TermAttrSet const noAttrs;
+  cm::StdIo::TermAttrSet attrs;
   bool newline = true;
   std::string progressDir;
   for (auto const& arg : cmMakeRange(args).advance(2)) {
@@ -1845,32 +1892,37 @@ int cmcmd::ExecuteEchoColor(std::vector<std::string> const& args)
         cmcmdProgressReport(progressDir, progressNum);
       }
     } else if (arg == "--normal") {
-      color = cmsysTerminal_Color_Normal;
+      attrs = cm::StdIo::TermAttr::Normal;
     } else if (arg == "--black") {
-      color = cmsysTerminal_Color_ForegroundBlack;
+      attrs = cm::StdIo::TermAttr::ForegroundBlack;
     } else if (arg == "--red") {
-      color = cmsysTerminal_Color_ForegroundRed;
+      attrs = cm::StdIo::TermAttr::ForegroundRed;
     } else if (arg == "--green") {
-      color = cmsysTerminal_Color_ForegroundGreen;
+      attrs = cm::StdIo::TermAttr::ForegroundGreen;
     } else if (arg == "--yellow") {
-      color = cmsysTerminal_Color_ForegroundYellow;
+      attrs = cm::StdIo::TermAttr::ForegroundYellow;
     } else if (arg == "--blue") {
-      color = cmsysTerminal_Color_ForegroundBlue;
+      attrs = cm::StdIo::TermAttr::ForegroundBlue;
     } else if (arg == "--magenta") {
-      color = cmsysTerminal_Color_ForegroundMagenta;
+      attrs = cm::StdIo::TermAttr::ForegroundMagenta;
     } else if (arg == "--cyan") {
-      color = cmsysTerminal_Color_ForegroundCyan;
+      attrs = cm::StdIo::TermAttr::ForegroundCyan;
     } else if (arg == "--white") {
-      color = cmsysTerminal_Color_ForegroundWhite;
+      attrs = cm::StdIo::TermAttr::ForegroundWhite;
     } else if (arg == "--bold") {
-      color |= cmsysTerminal_Color_ForegroundBold;
+      if (attrs.empty()) {
+        attrs = cm::StdIo::TermAttr::Normal;
+      }
+      attrs |= cm::StdIo::TermAttr::ForegroundBold;
     } else if (arg == "--no-newline") {
       newline = false;
     } else if (arg == "--newline") {
       newline = true;
     } else {
-      // Color is enabled.  Print with the current color.
-      cmSystemTools::MakefileColorEcho(color, arg.c_str(), newline, enabled);
+      Print(cm::StdIo::Out(), enabled ? attrs : noAttrs, arg);
+      if (newline) {
+        std::cout << std::endl;
+      }
     }
   }
 
@@ -1893,26 +1945,10 @@ int cmcmd::ExecuteLinkScript(std::vector<std::string> const& args)
     }
   }
 
-  // Allocate a process instance.
-  cmsysProcess* cp = cmsysProcess_New();
-  if (!cp) {
-    std::cerr << "Error allocating process instance in link script."
-              << std::endl;
-    return 1;
-  }
-
-  // Children should share stdout and stderr with this process.
-  cmsysProcess_SetPipeShared(cp, cmsysProcess_Pipe_STDOUT, 1);
-  cmsysProcess_SetPipeShared(cp, cmsysProcess_Pipe_STDERR, 1);
-
-  // Run the command lines verbatim.
-  cmsysProcess_SetOption(cp, cmsysProcess_Option_Verbatim, 1);
-
   // Read command lines from the script.
   cmsys::ifstream fin(args[2].c_str());
   if (!fin) {
-    std::cerr << "Error opening link script \"" << args[2] << "\""
-              << std::endl;
+    std::cerr << "Error opening link script \"" << args[2] << "\"\n";
     return 1;
   }
 
@@ -1925,50 +1961,56 @@ int cmcmd::ExecuteLinkScript(std::vector<std::string> const& args)
       continue;
     }
 
+    // Allocate a process instance.
+    cmUVProcessChainBuilder builder;
+
+    // Children should share stdout and stderr with this process.
+    builder.SetExternalStream(cmUVProcessChainBuilder::Stream_OUTPUT, stdout)
+      .SetExternalStream(cmUVProcessChainBuilder::Stream_ERROR, stderr);
+
     // Setup this command line.
-    const char* cmd[2] = { command.c_str(), nullptr };
-    cmsysProcess_SetCommand(cp, cmd);
+    std::vector<std::string> args2;
+#ifdef _WIN32
+    cmSystemTools::ParseWindowsCommandLine(command.c_str(), args2);
+#else
+    cmSystemTools::ParseUnixCommandLine(command.c_str(), args2);
+#endif
+    builder.AddCommand(args2);
 
     // Report the command if verbose output is enabled.
     if (verbose) {
-      std::cout << command << std::endl;
+      std::cout << command << '\n';
     }
 
     // Run the command and wait for it to exit.
-    cmsysProcess_Execute(cp);
-    cmsysProcess_WaitForExit(cp, nullptr);
+    auto chain = builder.Start();
+    chain.Wait();
 
     // Report failure if any.
-    switch (cmsysProcess_GetState(cp)) {
-      case cmsysProcess_State_Exited: {
-        int value = cmsysProcess_GetExitValue(cp);
-        if (value != 0) {
-          result = value;
+    auto const& status = chain.GetStatus(0);
+    auto exception = status.GetException();
+    switch (exception.first) {
+      case cmUVProcessChain::ExceptionCode::None:
+        if (status.ExitStatus != 0) {
+          result = static_cast<int>(status.ExitStatus);
         }
-      } break;
-      case cmsysProcess_State_Exception:
-        std::cerr << "Error running link command: "
-                  << cmsysProcess_GetExceptionString(cp) << std::endl;
-        result = 1;
         break;
-      case cmsysProcess_State_Error:
-        std::cerr << "Error running link command: "
-                  << cmsysProcess_GetErrorString(cp) << std::endl;
+      case cmUVProcessChain::ExceptionCode::Spawn:
+        std::cerr << "Error running link command: " << exception.second;
         result = 2;
         break;
       default:
+        std::cerr << "Error running link command: " << exception.second;
+        result = 1;
         break;
     }
   }
-
-  // Free the process instance.
-  cmsysProcess_Delete(cp);
 
   // Return the final resulting return value.
   return result;
 }
 
-int cmcmd::WindowsCEEnvironment(const char* version, const std::string& name)
+int cmcmd::WindowsCEEnvironment(char const* version, std::string const& name)
 {
 #if !defined(CMAKE_BOOTSTRAP) && defined(_WIN32) && !defined(__CYGWIN__)
   cmVisualStudioWCEPlatformParser parser(name.c_str());
@@ -1979,7 +2021,7 @@ int cmcmd::WindowsCEEnvironment(const char* version, const std::string& name)
                  "echo Environment Selection: " << name << "\n"
                  "set PATH=" << parser.GetPathDirectories() << "\n"
                  "set INCLUDE=" << parser.GetIncludeDirectories() << "\n"
-                 "set LIB=" << parser.GetLibraryDirectories() << std::endl;
+                 "set LIB=" << parser.GetLibraryDirectories() << '\n';
     /* clang-format on */
     return 0;
   }
@@ -1991,8 +2033,8 @@ int cmcmd::WindowsCEEnvironment(const char* version, const std::string& name)
   return -1;
 }
 
-int cmcmd::RunPreprocessor(const std::vector<std::string>& command,
-                           const std::string& intermediate_file)
+int cmcmd::RunPreprocessor(std::vector<std::string> const& command,
+                           std::string const& intermediate_file)
 {
   cmUVProcessChainBuilder builder;
 
@@ -2008,7 +2050,7 @@ int cmcmd::RunPreprocessor(const std::vector<std::string>& command,
     .SetBuiltinStream(cmUVProcessChainBuilder::Stream_ERROR)
     .AddCommand(command);
   auto process = builder.Start();
-  if (!process.Valid()) {
+  if (!process.Valid() || process.GetStatus(0).SpawnResult != 0) {
     std::cerr << "Failed to start preprocessor.";
     return 1;
   }
@@ -2016,12 +2058,9 @@ int cmcmd::RunPreprocessor(const std::vector<std::string>& command,
     std::cerr << "Failed to wait for preprocessor";
     return 1;
   }
-  auto status = process.GetStatus();
-  if (!status[0] || status[0]->ExitStatus != 0) {
-    auto* errorStream = process.ErrorStream();
-    if (errorStream) {
-      std::cerr << errorStream->rdbuf();
-    }
+  if (process.GetStatus(0).ExitStatus != 0) {
+    cmUVPipeIStream errorStream(process.GetLoop(), process.ErrorStream());
+    std::cerr << errorStream.rdbuf();
 
     return 1;
   }
@@ -2043,17 +2082,17 @@ int cmcmd::RunLLVMRC(std::vector<std::string> const& args)
     return 1;
   }
 
-  const std::string& intermediate_file = args[3];
-  const std::string& source_file = args[2];
+  std::string const& intermediate_file = args[3];
+  std::string const& source_file = args[2];
   std::vector<std::string> preprocess;
   std::vector<std::string> resource_compile;
   std::vector<std::string>* pArgTgt = &preprocess;
 
-  static const cmsys::RegularExpression llvm_rc_only_single_arg("^[-/](N|Y)");
-  static const cmsys::RegularExpression llvm_rc_only_double_arg(
+  static cmsys::RegularExpression const llvm_rc_only_single_arg("^[-/](N|Y)");
+  static cmsys::RegularExpression const llvm_rc_only_double_arg(
     "^[-/](C|LN|L)(.)?");
-  static const cmsys::RegularExpression common_double_arg(
-    "^[-/](D|U|I|FO|fo|Fo)(.)?");
+  static cmsys::RegularExpression const common_double_arg(
+    "^[-/](D|U|I|FO|fo|Fo)(.)?"); // noqa: spellcheck disable-line
   bool acceptNextArg = false;
   bool skipNextArg = false;
   for (std::string const& arg : cmMakeRange(args).advance(4)) {
@@ -2130,7 +2169,7 @@ int cmcmd::RunLLVMRC(std::vector<std::string> const& args)
     .AddCommand(resource_compile);
   auto process = builder.Start();
   result = 0;
-  if (!process.Valid()) {
+  if (!process.Valid() || process.GetStatus(0).SpawnResult != 0) {
     std::cerr << "Failed to start resource compiler.";
     result = 1;
   } else {
@@ -2144,12 +2183,9 @@ int cmcmd::RunLLVMRC(std::vector<std::string> const& args)
   if (result != 0) {
     return result;
   }
-  auto status = process.GetStatus();
-  if (!status[0] || status[0]->ExitStatus != 0) {
-    auto* errorStream = process.ErrorStream();
-    if (errorStream) {
-      std::cerr << errorStream->rdbuf();
-    }
+  if (process.GetStatus(0).ExitStatus != 0) {
+    cmUVPipeIStream errorStream(process.GetLoop(), process.ErrorStream());
+    std::cerr << errorStream.rdbuf();
     return 1;
   }
 
@@ -2161,6 +2197,7 @@ class cmVSLink
   int Type;
   bool Verbose;
   bool Incremental = false;
+  bool LinkEmbedsManifest = true;
   bool LinkGeneratesManifest = true;
   std::vector<std::string> LinkCommand;
   std::vector<std::string> UserManifests;
@@ -2191,18 +2228,21 @@ private:
 // For visual studio 2005 and newer manifest files need to be embedded into
 // exe and dll's.  This code does that in such a way that incremental linking
 // still works.
-int cmcmd::VisualStudioLink(std::vector<std::string> const& args, int type)
+int cmcmd::VisualStudioLink(std::vector<std::string> const& args, int type,
+                            cm::optional<cm::StdIo::Console> console)
 {
-  // Replace streambuf so we output in the system codepage. CMake is set up
-  // to output in Unicode (see SetUTF8Pipes) but the Visual Studio linker
-  // outputs using the system codepage so we need to change behavior when
-  // we run the link command.
-  cmConsoleBuf consoleBuf;
+  // MSVC tools print output in the language specified by the VSLANG
+  // environment variable, and encoded in the console output code page.
+  // Since vs_link_{exe,dll} just wraps these, pass through that encoding.
+  // RunCommand tells RunSingleCommand to *not* convert encoding, so
+  // we buffer the output in its original encoding instead of UTF-8.
+  // Drop our output encoding conversion so we print with original encoding.
+  console.reset();
 
   if (args.size() < 2) {
     return -1;
   }
-  const bool verbose = cmSystemTools::HasEnv("VERBOSE");
+  bool const verbose = cmSystemTools::HasEnv("VERBOSE");
   std::vector<std::string> expandedArgs;
   for (std::string const& i : args) {
     // check for nmake temporary files
@@ -2252,19 +2292,23 @@ static std::ostream& operator<<(std::ostream& stream,
   return stream;
 }
 
-static bool RunCommand(const char* comment,
+static bool RunCommand(char const* comment,
                        std::vector<std::string> const& command, bool verbose,
                        NumberFormat exitFormat, int* retCodeOut = nullptr,
                        bool (*retCodeOkay)(int) = nullptr)
 {
+  // See comment in VisualStudioLink for why we suppress encoding conversion.
+  cmProcessOutput::Encoding const encoding = cmProcessOutput::None;
+
   if (verbose) {
     std::cout << comment << ":\n";
-    std::cout << cmJoin(command, " ") << "\n";
+    std::cout << cmJoin(command, " ") << '\n';
   }
   std::string output;
   int retCode = 0;
   bool commandResult = cmSystemTools::RunSingleCommand(
-    command, &output, &output, &retCode, nullptr, cmSystemTools::OUTPUT_NONE);
+    command, &output, &output, &retCode, nullptr, cmSystemTools::OUTPUT_NONE,
+    cmDuration::zero(), encoding);
   bool const retCodeSuccess =
     retCode == 0 || (retCodeOkay && retCodeOkay(retCode));
   bool const success = commandResult && retCodeSuccess;
@@ -2315,6 +2359,12 @@ bool cmVSLink::Parse(std::vector<std::string>::const_iterator argBeg,
     } else if (cmHasLiteralPrefix(*arg, "--mt=")) {
       this->MtPath = arg->substr(5);
       ++arg;
+    } else if (cmHasLiteralPrefix(*arg, "--msvc-ver=")) {
+      unsigned long msvc_ver = 0;
+      if (cmStrToULong(arg->c_str() + 11, &msvc_ver)) {
+        this->LinkEmbedsManifest = msvc_ver > 1600;
+      }
+      ++arg;
     } else {
       std::cerr << "unknown argument '" << *arg << "'\n";
       return false;
@@ -2364,11 +2414,13 @@ bool cmVSLink::Parse(std::vector<std::string>::const_iterator argBeg,
     // pass it to the link command.
     this->ManifestFileRC = intDir + "/manifest.rc";
     this->ManifestFileRes = intDir + "/manifest.res";
+  }
 
-    if (this->LinkGeneratesManifest) {
-      this->LinkCommand.emplace_back("/MANIFEST");
-      this->LinkCommand.push_back("/MANIFESTFILE:" + this->LinkerManifestFile);
-    }
+  if (this->LinkGeneratesManifest &&
+      (this->Incremental || !this->LinkEmbedsManifest)) {
+    this->LinkCommand.emplace_back("/MANIFEST");
+    this->LinkCommand.emplace_back("/MANIFESTFILE:" +
+                                   this->LinkerManifestFile);
   }
 
   return true;
@@ -2427,9 +2479,9 @@ int cmVSLink::LinkIncremental()
 
   // Create a resource file referencing the manifest.
   std::string absManifestFile =
-    cmSystemTools::CollapseFullPath(this->ManifestFile);
+    cmSystemTools::ToNormalizedPathOnDisk(this->ManifestFile);
   if (this->Verbose) {
-    std::cout << "Create " << this->ManifestFileRC << "\n";
+    std::cout << "Create " << this->ManifestFileRC << '\n';
   }
   {
     cmsys::ofstream fout(this->ManifestFileRC.c_str());
@@ -2437,8 +2489,8 @@ int cmVSLink::LinkIncremental()
       return -1;
     }
     // Insert a pragma statement to specify utf-8 encoding.
-    fout << "#pragma code_page(65001)\n";
-    fout << this->Type
+    fout << "#pragma code_page(65001)\n"
+         << this->Type
          << " /* CREATEPROCESS_MANIFEST_RESOURCE_ID */ "
             "24 /* RT_MANIFEST */ \""
          << absManifestFile << "\"";
@@ -2448,7 +2500,7 @@ int cmVSLink::LinkIncremental()
   // generate a manifest file so the resource compiler succeeds.
   if (!cmSystemTools::FileExists(this->ManifestFile)) {
     if (this->Verbose) {
-      std::cout << "Create empty: " << this->ManifestFile << "\n";
+      std::cout << "Create empty: " << this->ManifestFile << '\n';
     }
     if (this->UserManifests.empty()) {
       // generate an empty manifest because there are no user provided
@@ -2462,7 +2514,7 @@ int cmVSLink::LinkIncremental()
   // Compile the resource file.
   std::vector<std::string> rcCommand;
   rcCommand.push_back(this->RcPath.empty() ? "rc" : this->RcPath);
-  rcCommand.emplace_back("/fo");
+  rcCommand.emplace_back("/fo"); // noqa: spellcheck disable-line
   rcCommand.push_back(this->ManifestFileRes);
   rcCommand.push_back(this->ManifestFileRC);
   if (!RunCommand("RC Pass 1", rcCommand, this->Verbose, FORMAT_DECIMAL)) {
@@ -2502,6 +2554,24 @@ int cmVSLink::LinkIncremental()
 
 int cmVSLink::LinkNonIncremental()
 {
+  if (!this->LinkEmbedsManifest) {
+    // Run the link command (possibly generates intermediate manifest).
+    if (!RunCommand("LINK", this->LinkCommand, this->Verbose,
+                    FORMAT_DECIMAL)) {
+      return -1;
+    }
+
+    // If we have no manifest files we are done.
+    if (!this->LinkGeneratesManifest && this->UserManifests.empty()) {
+      return 0;
+    }
+
+    // Run the manifest tool to embed the final manifest in the binary.
+    std::string mtOut = "/outputresource:" + this->TargetFile +
+      (this->Type == 1 ? ";#1" : ";#2");
+    return this->RunMT(mtOut, false);
+  }
+
   // The MSVC link tool expects 'rc' to be in the PATH if it needs to embed
   // manifests, but the user might explicitly set 'CMAKE_RC_COMPILER' instead.
   // Add its location as a fallback at the end of PATH.
@@ -2546,14 +2616,17 @@ int cmVSLink::RunMT(std::string const& out, bool notify)
   std::vector<std::string> mtCommand;
   mtCommand.push_back(this->MtPath.empty() ? "mt" : this->MtPath);
   mtCommand.emplace_back("/nologo");
-  mtCommand.emplace_back("/manifest");
 
   // add the linker generated manifest if the file exists.
   if (this->LinkGeneratesManifest &&
       cmSystemTools::FileExists(this->LinkerManifestFile)) {
+    mtCommand.emplace_back("/manifest");
     mtCommand.push_back(this->LinkerManifestFile);
   }
-  cm::append(mtCommand, this->UserManifests);
+  for (auto const& m : this->UserManifests) {
+    mtCommand.emplace_back("/manifest");
+    mtCommand.push_back(m);
+  }
   mtCommand.push_back(out);
   if (notify) {
     // Add an undocumented option that enables a special return

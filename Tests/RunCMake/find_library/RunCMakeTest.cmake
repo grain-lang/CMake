@@ -1,5 +1,7 @@
 include(RunCMake)
 
+run_cmake(ConfigureLogTransitions)
+run_cmake(ConfigureLogTransitionsSuppressed)
 run_cmake(Created)
 run_cmake(FromPrefixPath)
 run_cmake(FromPATHEnv)
@@ -12,6 +14,7 @@ if(UNIX AND NOT CYGWIN)
 endif()
 run_cmake(PrefixInPATH)
 run_cmake(Required)
+run_cmake(Optional)
 run_cmake(NO_CACHE)
 run_cmake(REGISTRY_VIEW-no-view)
 run_cmake(REGISTRY_VIEW-wrong-view)
@@ -19,6 +22,14 @@ run_cmake(VALIDATOR-no-function)
 run_cmake(VALIDATOR-undefined-function)
 run_cmake(VALIDATOR-specify-macro)
 run_cmake(VALIDATOR)
+
+if(CMAKE_HOST_WIN32 AND MINGW)
+  run_cmake(MSYSTEM_PREFIX)
+endif()
+
+if(CMAKE_HOST_WIN32 AND MSVC)
+  run_cmake(Windows-MSVC)
+endif()
 
 run_cmake_script(FromScriptMode "-DTEMP_DIR=${RunCMake_BINARY_DIR}/FromScriptMode-temp")
 

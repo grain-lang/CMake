@@ -1,6 +1,9 @@
 CMP0012
 -------
 
+.. |REMOVED_IN_CMAKE_VERSION| replace:: 4.0
+.. include:: include/REMOVED_PROLOGUE.rst
+
 :command:`if` recognizes numbers and boolean constants.
 
 In CMake versions 2.6.4 and lower the :command:`if` command implicitly
@@ -21,8 +24,6 @@ variables named like numbers and boolean constants.  The ``NEW`` behavior
 for this policy is to recognize numbers and boolean constants without
 dereferencing variables with such names.
 
-This policy was introduced in CMake version 2.8.0.  CMake version
-|release| warns when the policy is not set and uses ``OLD`` behavior.  Use
-the :command:`cmake_policy` command to set it to ``OLD`` or ``NEW`` explicitly.
-
-.. include:: DEPRECATED.txt
+.. |INTRODUCED_IN_CMAKE_VERSION| replace:: 2.8.0
+.. |WARNED_OR_DID_NOT_WARN| replace:: warned
+.. include:: include/REMOVED_EPILOGUE.rst

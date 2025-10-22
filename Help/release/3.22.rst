@@ -19,7 +19,7 @@ Commands
 * The :command:`string(TIMESTAMP)` command now supports the ``%V``
   specifier for ISO 8601 week numbers.
 
-.. _`OS identification variables`: https://www.freedesktop.org/software/systemd/man/os-release.html
+.. _`OS identification variables`: https://www.freedesktop.org/software/systemd/man/latest/os-release.html
 
 Variables
 ---------
@@ -58,7 +58,7 @@ Modules
 -------
 
 * The :module:`CMakeDependentOption` module :command:`cmake_dependent_option`
-  macro now supports full :ref:`Condition Syntax`.
+  command now supports full :ref:`Condition Syntax`.
   See policy :policy:`CMP0127`.
 
 * The :module:`FetchContent` module now passes through the

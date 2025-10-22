@@ -5,6 +5,8 @@ add_library(cxx_lib ../empty.cxx)
 add_executable(cxx_exe ../empty.cxx)
 target_link_libraries(cxx_exe PRIVATE cxx_lib)
 set_property(TARGET cxx_exe PROPERTY FOLDER bin)
+set_property(TARGET cxx_exe PROPERTY DEBUGGER_WORKING_DIRECTORY "/test/debugger/workingDirectory")
+set_property(TARGET cxx_exe PROPERTY VS_DEBUGGER_WORKING_DIRECTORY "/test/debugger/workingDirectoryVS")
 
 add_library(cxx_shared_lib SHARED ../empty.cxx)
 add_executable(cxx_shared_exe ../empty.cxx)
@@ -45,3 +47,8 @@ if(_rdeps)
     FRAMEWORK DESTINATION fw
     )
 endif()
+
+add_executable(cxx_exe_test_launcher ../empty.cxx)
+set_property(TARGET cxx_exe_test_launcher PROPERTY TEST_LAUNCHER "$<1:no-such-launcher>")
+
+add_subdirectory(cross)

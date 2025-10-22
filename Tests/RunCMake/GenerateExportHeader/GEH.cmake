@@ -82,7 +82,7 @@ if(NOT BORLAND)
   add_subdirectory(c_identifier)
 endif()
 
-if (CMAKE_COMPILER_IS_GNUCXX OR (${CMAKE_CXX_COMPILER_ID} MATCHES Clang))
+if (CMAKE_CXX_COMPILER_ID MATCHES "^(GNU|LCC)$" OR (${CMAKE_CXX_COMPILER_ID} MATCHES Clang))
   # No need to clutter the test output with warnings.
   string(APPEND CMAKE_CXX_FLAGS " -Wno-deprecated-declarations")
 endif()
@@ -98,7 +98,7 @@ if (WIN32 OR CYGWIN)
   if((CMAKE_CXX_COMPILER_ID STREQUAL "Clang" OR CMAKE_CXX_COMPILER_ID STREQUAL "IntelLLVM") AND
     CMAKE_CXX_SIMULATE_ID STREQUAL "MSVC")
     set(_platform Win32-Clang)
-  elseif(MSVC AND COMPILER_HAS_DEPRECATED)
+  elseif((MSVC OR CMAKE_C_COMPILER_ID STREQUAL "OrangeC") AND COMPILER_HAS_DEPRECATED)
     set(_platform Win32)
   elseif(CYGWIN AND COMPILER_HAS_DEPRECATED)
     set(_platform Cygwin)

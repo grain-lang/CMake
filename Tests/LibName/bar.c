@@ -2,6 +2,7 @@
 __declspec(dllexport)
 #endif
 
-  extern void foo()
+extern void
+foo(void)
 {
 }

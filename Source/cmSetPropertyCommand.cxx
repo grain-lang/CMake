@@ -1,10 +1,12 @@
 /* Distributed under the OSI-approved BSD 3-Clause License.  See accompanying
-   file Copyright.txt or https://cmake.org/licensing for details.  */
+   file LICENSE.rst or https://cmake.org/licensing for details.  */
 #include "cmSetPropertyCommand.h"
 
 #include <set>
 #include <sstream>
 #include <unordered_set>
+
+#include <cm/string_view>
 
 #include "cmExecutionStatus.h"
 #include "cmGlobalGenerator.h"
@@ -27,58 +29,59 @@
 
 namespace {
 bool HandleGlobalMode(cmExecutionStatus& status,
-                      const std::set<std::string>& names,
-                      const std::string& propertyName,
-                      const std::string& propertyValue, bool appendAsString,
+                      std::set<std::string> const& names,
+                      std::string const& propertyName,
+                      std::string const& propertyValue, bool appendAsString,
                       bool appendMode, bool remove);
 bool HandleDirectoryMode(cmExecutionStatus& status,
-                         const std::set<std::string>& names,
-                         const std::string& propertyName,
-                         const std::string& propertyValue, bool appendAsString,
+                         std::set<std::string> const& names,
+                         std::string const& propertyName,
+                         std::string const& propertyValue, bool appendAsString,
                          bool appendMode, bool remove);
 bool HandleTargetMode(cmExecutionStatus& status,
-                      const std::set<std::string>& names,
-                      const std::string& propertyName,
-                      const std::string& propertyValue, bool appendAsString,
+                      std::set<std::string> const& names,
+                      std::string const& propertyName,
+                      std::string const& propertyValue, bool appendAsString,
                       bool appendMode, bool remove);
 bool HandleTarget(cmTarget* target, cmMakefile& makefile,
-                  const std::string& propertyName,
-                  const std::string& propertyValue, bool appendAsString,
+                  std::string const& propertyName,
+                  std::string const& propertyValue, bool appendAsString,
                   bool appendMode, bool remove);
 bool HandleSourceMode(cmExecutionStatus& status,
-                      const std::set<std::string>& names,
-                      const std::string& propertyName,
-                      const std::string& propertyValue, bool appendAsString,
+                      std::set<std::string> const& names,
+                      std::string const& propertyName,
+                      std::string const& propertyValue, bool appendAsString,
                       bool appendMode, bool remove,
-                      const std::vector<cmMakefile*>& directory_makefiles,
+                      std::vector<cmMakefile*> const& directory_makefiles,
                       bool source_file_paths_should_be_absolute);
-bool HandleSource(cmSourceFile* sf, const std::string& propertyName,
-                  const std::string& propertyValue, bool appendAsString,
+bool HandleSource(cmSourceFile* sf, std::string const& propertyName,
+                  std::string const& propertyValue, bool appendAsString,
                   bool appendMode, bool remove);
 bool HandleTestMode(cmExecutionStatus& status, std::set<std::string>& names,
-                    const std::string& propertyName,
-                    const std::string& propertyValue, bool appendAsString,
-                    bool appendMode, bool remove);
-bool HandleTest(cmTest* test, const std::string& propertyName,
-                const std::string& propertyValue, bool appendAsString,
+                    std::string const& propertyName,
+                    std::string const& propertyValue, bool appendAsString,
+                    bool appendMode, bool remove,
+                    cmMakefile* test_directory_makefile);
+bool HandleTest(cmTest* test, std::string const& propertyName,
+                std::string const& propertyValue, bool appendAsString,
                 bool appendMode, bool remove);
 bool HandleCacheMode(cmExecutionStatus& status,
-                     const std::set<std::string>& names,
-                     const std::string& propertyName,
-                     const std::string& propertyValue, bool appendAsString,
+                     std::set<std::string> const& names,
+                     std::string const& propertyName,
+                     std::string const& propertyValue, bool appendAsString,
                      bool appendMode, bool remove);
-bool HandleCacheEntry(std::string const& cacheKey, const cmMakefile& makefile,
-                      const std::string& propertyName,
-                      const std::string& propertyValue, bool appendAsString,
+bool HandleCacheEntry(std::string const& cacheKey, cmMakefile const& makefile,
+                      std::string const& propertyName,
+                      std::string const& propertyValue, bool appendAsString,
                       bool appendMode, bool remove);
 bool HandleInstallMode(cmExecutionStatus& status,
-                       const std::set<std::string>& names,
-                       const std::string& propertyName,
-                       const std::string& propertyValue, bool appendAsString,
+                       std::set<std::string> const& names,
+                       std::string const& propertyName,
+                       std::string const& propertyValue, bool appendAsString,
                        bool appendMode, bool remove);
 bool HandleInstall(cmInstalledFile* file, cmMakefile& makefile,
-                   const std::string& propertyName,
-                   const std::string& propertyValue, bool appendAsString,
+                   std::string const& propertyName,
+                   std::string const& propertyValue, bool appendAsString,
                    bool appendMode, bool remove);
 }
 
@@ -92,8 +95,8 @@ bool HandleSourceFileDirectoryScopes(
 
   cmMakefile* current_dir_mf = &status.GetMakefile();
   if (!source_file_directories.empty()) {
-    for (const std::string& dir_path : source_file_directories) {
-      const std::string absolute_dir_path = cmSystemTools::CollapseFullPath(
+    for (std::string const& dir_path : source_file_directories) {
+      std::string const absolute_dir_path = cmSystemTools::CollapseFullPath(
         dir_path, current_dir_mf->GetCurrentSourceDirectory());
       cmMakefile* dir_mf =
         status.GetMakefile().GetGlobalGenerator()->FindMakefile(
@@ -111,7 +114,7 @@ bool HandleSourceFileDirectoryScopes(
   }
 
   if (!source_file_target_directories.empty()) {
-    for (const std::string& target_name : source_file_target_directories) {
+    for (std::string const& target_name : source_file_target_directories) {
       cmTarget* target = current_dir_mf->FindTargetToUse(target_name);
       if (!target) {
         status.SetError(cmStrCat(
@@ -184,9 +187,63 @@ bool HandleAndValidateSourceFileDirectoryScopes(
   return scope_options_valid;
 }
 
+bool HandleTestDirectoryScopes(cmExecutionStatus& status,
+                               std::string& test_directory,
+                               cmMakefile*& directory_makefile)
+{
+  cmMakefile* current_dir_mf = &status.GetMakefile();
+  if (!test_directory.empty()) {
+    std::string const absolute_dir_path = cmSystemTools::CollapseFullPath(
+      test_directory, current_dir_mf->GetCurrentSourceDirectory());
+    cmMakefile* dir_mf =
+      status.GetMakefile().GetGlobalGenerator()->FindMakefile(
+        absolute_dir_path);
+    if (!dir_mf) {
+      status.SetError(
+        cmStrCat("given non-existent DIRECTORY ", test_directory));
+      return false;
+    }
+    directory_makefile = dir_mf;
+  } else {
+    directory_makefile = current_dir_mf;
+  }
+  return true;
+}
+
+bool HandleTestDirectoryScopeValidation(cmExecutionStatus& status,
+                                        bool test_directory_option_enabled,
+                                        std::string& test_directory)
+{
+  // Validate source file directory scopes.
+  if (test_directory_option_enabled && test_directory.empty()) {
+    std::string errors = "called with incorrect number of arguments "
+                         "no value provided to the DIRECTORY option";
+    status.SetError(errors);
+    return false;
+  }
+  return true;
+}
+
+bool HandleAndValidateTestDirectoryScopes(cmExecutionStatus& status,
+                                          bool test_directory_option_enabled,
+                                          std::string& test_directory,
+                                          cmMakefile*& test_directory_makefile)
+{
+  bool scope_options_valid =
+    SetPropertyCommand::HandleTestDirectoryScopeValidation(
+      status, test_directory_option_enabled, test_directory);
+  if (!scope_options_valid) {
+    return false;
+  }
+
+  scope_options_valid = SetPropertyCommand::HandleTestDirectoryScopes(
+    status, test_directory, test_directory_makefile);
+  return scope_options_valid;
+}
+
 std::string MakeSourceFilePathAbsoluteIfNeeded(
-  cmExecutionStatus& status, const std::string& source_file_path,
-  const bool needed)
+  cmExecutionStatus& status, std::string const& source_file_path,
+  bool const needed)
 {
   if (!needed) {
     return source_file_path;
@@ -200,7 +257,7 @@ void MakeSourceFilePathsAbsoluteIfNeeded(
   cmExecutionStatus& status,
   std::vector<std::string>& source_files_absolute_paths,
   std::vector<std::string>::const_iterator files_it_begin,
-  std::vector<std::string>::const_iterator files_it_end, const bool needed)
+  std::vector<std::string>::const_iterator files_it_end, bool const needed)
 {
 
   // Make the file paths absolute, so that relative source file paths are
@@ -216,7 +273,7 @@ void MakeSourceFilePathsAbsoluteIfNeeded(
   }
 
   for (; files_it_begin != files_it_end; ++files_it_begin) {
-    const std::string absolute_file_path =
+    std::string const absolute_file_path =
       MakeSourceFilePathAbsoluteIfNeeded(status, *files_it_begin, true);
     source_files_absolute_paths.push_back(absolute_file_path);
   }
@@ -225,13 +282,61 @@ void MakeSourceFilePathsAbsoluteIfNeeded(
 bool HandleAndValidateSourceFilePropertyGENERATED(
   cmSourceFile* sf, std::string const& propertyValue, PropertyOp op)
 {
-  const auto& mf = *sf->GetLocation().GetMakefile();
-  auto policyStatus = mf.GetPolicyStatus(cmPolicies::CMP0118);
+  auto const& mf = *sf->GetLocation().GetMakefile();
 
-  const bool policyWARN = policyStatus == cmPolicies::WARN;
-  const bool policyNEW = policyStatus != cmPolicies::OLD && !policyWARN;
+  auto isProblematic = [&mf, &propertyValue,
+                        op](cm::string_view policy) -> bool {
+    if (!cmIsOn(propertyValue) && !cmIsOff(propertyValue)) {
+      mf.IssueMessage(
+        MessageType::AUTHOR_ERROR,
+        cmStrCat("Policy ", policy,
+                 " is set to NEW and the following non-boolean value given "
+                 "for property 'GENERATED' is therefore not allowed:\n",
+                 propertyValue, "\nReplace it with a boolean value!\n"));
+      return true;
+    }
+    if (cmIsOff(propertyValue)) {
+      mf.IssueMessage(
+        MessageType::AUTHOR_ERROR,
+        cmStrCat("Unsetting the 'GENERATED' property is not allowed under ",
+                 policy, "!\n"));
+      return true;
+    }
+    if (op == PropertyOp::Append || op == PropertyOp::AppendAsString) {
+      mf.IssueMessage(
+        MessageType::AUTHOR_ERROR,
+        cmStrCat(
+          "Policy ", policy,
+          " is set to NEW and appending to the 'GENERATED' property is "
+          "therefore not allowed. Only setting it to \"1\" is allowed!\n"));
+      return true;
+    }
+    return false;
+  };
 
-  if (policyWARN) {
+  auto const cmp0163PolicyStatus = mf.GetPolicyStatus(cmPolicies::CMP0163);
+  bool const cmp0163PolicyNEW = cmp0163PolicyStatus != cmPolicies::OLD &&
+    cmp0163PolicyStatus != cmPolicies::WARN;
+  if (cmp0163PolicyNEW) {
+    if (!isProblematic("CMP0163")) {
+      sf->MarkAsGenerated();
+    }
+    return true;
+  }
+
+  auto const cmp0118PolicyStatus = mf.GetPolicyStatus(cmPolicies::CMP0118);
+  bool const cmp0118PolicyWARN = cmp0118PolicyStatus == cmPolicies::WARN;
+  bool const cmp0118PolicyNEW =
+    cmp0118PolicyStatus != cmPolicies::OLD && !cmp0118PolicyWARN;
+
+  if (cmp0118PolicyNEW) {
+    if (!isProblematic("CMP0118")) {
+      sf->MarkAsGenerated();
+    }
+    return true;
+  }
+
+  if (cmp0118PolicyWARN) {
     if (!cmIsOn(propertyValue) && !cmIsOff(propertyValue)) {
       mf.IssueMessage(
         MessageType::AUTHOR_WARNING,
@@ -257,50 +362,22 @@ bool HandleAndValidateSourceFilePropertyGENERATED(
                  "\nAppending to property 'GENERATED' will not be allowed "
                  "under policy CMP0118!\n"));
     }
-  } else if (policyNEW) {
-    if (!cmIsOn(propertyValue) && !cmIsOff(propertyValue)) {
-      mf.IssueMessage(
-        MessageType::AUTHOR_ERROR,
-        cmStrCat(
-          "Policy CMP0118 is set to NEW and the following non-boolean value "
-          "given for property 'GENERATED' is therefore not allowed:\n",
-          propertyValue, "\nReplace it with a boolean value!\n"));
-      return true;
-    }
-    if (cmIsOff(propertyValue)) {
-      mf.IssueMessage(
-        MessageType::AUTHOR_ERROR,
-        "Unsetting the 'GENERATED' property is not allowed under CMP0118!\n");
-      return true;
-    }
-    if (op == PropertyOp::Append || op == PropertyOp::AppendAsString) {
-      mf.IssueMessage(MessageType::AUTHOR_ERROR,
-                      "Policy CMP0118 is set to NEW and appending to the "
-                      "'GENERATED' property is therefore not allowed. Only "
-                      "setting it to \"1\" is allowed!\n");
-      return true;
-    }
   }
 
-  // Set property.
-  if (!policyNEW) {
-    // Do it the traditional way.
-    switch (op) {
-      case PropertyOp::Append:
-        sf->AppendProperty("GENERATED", propertyValue, false);
-        break;
-      case PropertyOp::AppendAsString:
-        sf->AppendProperty("GENERATED", propertyValue, true);
-        break;
-      case PropertyOp::Remove:
-        sf->SetProperty("GENERATED", nullptr);
-        break;
-      case PropertyOp::Set:
-        sf->SetProperty("GENERATED", propertyValue);
-        break;
-    }
-  } else {
-    sf->MarkAsGenerated();
+  // Set property the traditional way.
+  switch (op) {
+    case PropertyOp::Append:
+      sf->AppendProperty("GENERATED", propertyValue, false);
+      break;
+    case PropertyOp::AppendAsString:
+      sf->AppendProperty("GENERATED", propertyValue, true);
+      break;
+    case PropertyOp::Remove:
+      sf->RemoveProperty("GENERATED");
+      break;
+    case PropertyOp::Set:
+      sf->SetProperty("GENERATED", propertyValue);
+      break;
   }
   return true;
 }
@@ -352,6 +429,9 @@ bool cmSetPropertyCommand(std::vector<std::string> const& args,
   bool source_file_directory_option_enabled = false;
   bool source_file_target_option_enabled = false;
 
+  std::string test_directory;
+  bool test_directory_option_enabled = false;
+
   // Parse the rest of the arguments up to the values.
   enum Doing
   {
@@ -360,10 +440,11 @@ bool cmSetPropertyCommand(std::vector<std::string> const& args,
     DoingProperty,
     DoingValues,
     DoingSourceDirectory,
-    DoingSourceTargetDirectory
+    DoingSourceTargetDirectory,
+    DoingTestDirectory,
   };
   Doing doing = DoingNames;
-  const char* sep = "";
+  char const* sep = "";
   for (std::string const& arg : cmMakeRange(args).advance(1)) {
     if (arg == "PROPERTY") {
       doing = DoingProperty;
@@ -385,12 +466,19 @@ bool cmSetPropertyCommand(std::vector<std::string> const& args,
                scope == cmProperty::SOURCE_FILE && arg == "TARGET_DIRECTORY") {
       doing = DoingSourceTargetDirectory;
       source_file_target_option_enabled = true;
+    } else if (doing != DoingProperty && doing != DoingValues &&
+               scope == cmProperty::TEST && arg == "DIRECTORY") {
+      doing = DoingTestDirectory;
+      test_directory_option_enabled = true;
     } else if (doing == DoingNames) {
       names.insert(arg);
     } else if (doing == DoingSourceDirectory) {
       source_file_directories.push_back(arg);
     } else if (doing == DoingSourceTargetDirectory) {
       source_file_target_directories.push_back(arg);
+    } else if (doing == DoingTestDirectory) {
+      test_directory = arg;
+      doing = DoingNone;
     } else if (doing == DoingProperty) {
       propertyName = arg;
       doing = DoingValues;
@@ -412,12 +500,17 @@ bool cmSetPropertyCommand(std::vector<std::string> const& args,
   }
 
   std::vector<cmMakefile*> source_file_directory_makefiles;
-  bool file_scopes_handled =
+  bool source_file_scopes_handled =
     SetPropertyCommand::HandleAndValidateSourceFileDirectoryScopes(
       status, source_file_directory_option_enabled,
       source_file_target_option_enabled, source_file_directories,
       source_file_target_directories, source_file_directory_makefiles);
-  if (!file_scopes_handled) {
+  cmMakefile* test_directory_makefile;
+  bool test_scopes_handled =
+    SetPropertyCommand::HandleAndValidateTestDirectoryScopes(
+      status, test_directory_option_enabled, test_directory,
+      test_directory_makefile);
+  if (!(source_file_scopes_handled && test_scopes_handled)) {
     return false;
   }
   bool source_file_paths_should_be_absolute =
@@ -441,7 +534,8 @@ bool cmSetPropertyCommand(std::vector<std::string> const& args,
                               source_file_paths_should_be_absolute);
     case cmProperty::TEST:
       return HandleTestMode(status, names, propertyName, propertyValue,
-                            appendAsString, appendMode, remove);
+                            appendAsString, appendMode, remove,
+                            test_directory_makefile);
     case cmProperty::CACHE:
       return HandleCacheMode(status, names, propertyName, propertyValue,
                              appendAsString, appendMode, remove);
@@ -458,9 +552,9 @@ bool cmSetPropertyCommand(std::vector<std::string> const& args,
 
 namespace /* anonymous */ {
 bool HandleGlobalMode(cmExecutionStatus& status,
-                      const std::set<std::string>& names,
-                      const std::string& propertyName,
-                      const std::string& propertyValue, bool appendAsString,
+                      std::set<std::string> const& names,
+                      std::string const& propertyName,
+                      std::string const& propertyValue, bool appendAsString,
                       bool appendMode, bool remove)
 {
   if (!names.empty()) {
@@ -484,9 +578,9 @@ bool HandleGlobalMode(cmExecutionStatus& status,
 }
 
 bool HandleDirectoryMode(cmExecutionStatus& status,
-                         const std::set<std::string>& names,
-                         const std::string& propertyName,
-                         const std::string& propertyValue, bool appendAsString,
+                         std::set<std::string> const& names,
+                         std::string const& propertyName,
+                         std::string const& propertyValue, bool appendAsString,
                          bool appendMode, bool remove)
 {
   if (names.size() > 1) {
@@ -530,9 +624,9 @@ bool HandleDirectoryMode(cmExecutionStatus& status,
 }
 
 bool HandleTargetMode(cmExecutionStatus& status,
-                      const std::set<std::string>& names,
-                      const std::string& propertyName,
-                      const std::string& propertyValue, bool appendAsString,
+                      std::set<std::string> const& names,
+                      std::string const& propertyName,
+                      std::string const& propertyValue, bool appendAsString,
                       bool appendMode, bool remove)
 {
   for (std::string const& name : names) {
@@ -556,8 +650,8 @@ bool HandleTargetMode(cmExecutionStatus& status,
 }
 
 bool HandleTarget(cmTarget* target, cmMakefile& makefile,
-                  const std::string& propertyName,
-                  const std::string& propertyValue, bool appendAsString,
+                  std::string const& propertyName,
+                  std::string const& propertyValue, bool appendAsString,
                   bool appendMode, bool remove)
 {
   // Set or append the property.
@@ -579,12 +673,12 @@ bool HandleTarget(cmTarget* target, cmMakefile& makefile,
 }
 
 bool HandleSourceMode(cmExecutionStatus& status,
-                      const std::set<std::string>& names,
-                      const std::string& propertyName,
-                      const std::string& propertyValue, bool appendAsString,
+                      std::set<std::string> const& names,
+                      std::string const& propertyName,
+                      std::string const& propertyValue, bool appendAsString,
                       bool appendMode, bool remove,
-                      const std::vector<cmMakefile*>& directory_makefiles,
-                      const bool source_file_paths_should_be_absolute)
+                      std::vector<cmMakefile*> const& directory_makefiles,
+                      bool const source_file_paths_should_be_absolute)
 {
   std::vector<std::string> files_absolute;
   std::vector<std::string> unique_files(names.begin(), names.end());
@@ -611,8 +705,8 @@ bool HandleSourceMode(cmExecutionStatus& status,
   return true;
 }
 
-bool HandleSource(cmSourceFile* sf, const std::string& propertyName,
-                  const std::string& propertyValue, bool appendAsString,
+bool HandleSource(cmSourceFile* sf, std::string const& propertyName,
+                  std::string const& propertyValue, bool appendAsString,
                   bool appendMode, bool remove)
 {
   // Special validation and handling of GENERATED flag?
@@ -631,7 +725,7 @@ bool HandleSource(cmSourceFile* sf, const std::string& propertyName,
     sf->AppendProperty(propertyName, propertyValue, appendAsString);
   } else {
     if (remove) {
-      sf->SetProperty(propertyName, nullptr);
+      sf->RemoveProperty(propertyName);
     } else {
       sf->SetProperty(propertyName, propertyValue);
     }
@@ -640,16 +734,16 @@ bool HandleSource(cmSourceFile* sf, const std::string& propertyName,
 }
 
 bool HandleTestMode(cmExecutionStatus& status, std::set<std::string>& names,
-                    const std::string& propertyName,
-                    const std::string& propertyValue, bool appendAsString,
-                    bool appendMode, bool remove)
+                    std::string const& propertyName,
+                    std::string const& propertyValue, bool appendAsString,
+                    bool appendMode, bool remove, cmMakefile* test_makefile)
 {
   // Look for tests with all names given.
   std::set<std::string>::iterator next;
   for (auto ni = names.begin(); ni != names.end(); ni = next) {
     next = ni;
     ++next;
-    if (cmTest* test = status.GetMakefile().GetTest(*ni)) {
+    if (cmTest* test = test_makefile->GetTest(*ni)) {
       if (HandleTest(test, propertyName, propertyValue, appendAsString,
                      appendMode, remove)) {
         names.erase(ni);
@@ -672,8 +766,8 @@ bool HandleTestMode(cmExecutionStatus& status, std::set<std::string>& names,
   return true;
 }
 
-bool HandleTest(cmTest* test, const std::string& propertyName,
-                const std::string& propertyValue, bool appendAsString,
+bool HandleTest(cmTest* test, std::string const& propertyName,
+                std::string const& propertyValue, bool appendAsString,
                 bool appendMode, bool remove)
 {
   // Set or append the property.
@@ -691,9 +785,9 @@ bool HandleTest(cmTest* test, const std::string& propertyName,
 }
 
 bool HandleCacheMode(cmExecutionStatus& status,
-                     const std::set<std::string>& names,
-                     const std::string& propertyName,
-                     const std::string& propertyValue, bool appendAsString,
+                     std::set<std::string> const& names,
+                     std::string const& propertyName,
+                     std::string const& propertyValue, bool appendAsString,
                      bool appendMode, bool remove)
 {
   if (propertyName == "ADVANCED") {
@@ -705,7 +799,7 @@ bool HandleCacheMode(cmExecutionStatus& status,
   } else if (propertyName == "TYPE") {
     if (!cmState::IsCacheEntryType(propertyValue)) {
       status.SetError(
-        cmStrCat("given invalid CACHE entry TYPE \"", propertyValue, "\""));
+        cmStrCat("given invalid CACHE entry TYPE \"", propertyValue, '"'));
       return false;
     }
   } else if (propertyName != "HELPSTRING" && propertyName != "STRINGS" &&
@@ -737,9 +831,9 @@ bool HandleCacheMode(cmExecutionStatus& status,
   return true;
 }
 
-bool HandleCacheEntry(std::string const& cacheKey, const cmMakefile& makefile,
-                      const std::string& propertyName,
-                      const std::string& propertyValue, bool appendAsString,
+bool HandleCacheEntry(std::string const& cacheKey, cmMakefile const& makefile,
+                      std::string const& propertyName,
+                      std::string const& propertyValue, bool appendAsString,
                       bool appendMode, bool remove)
 {
   // Set or append the property.
@@ -758,9 +852,9 @@ bool HandleCacheEntry(std::string const& cacheKey, const cmMakefile& makefile,
 }
 
 bool HandleInstallMode(cmExecutionStatus& status,
-                       const std::set<std::string>& names,
-                       const std::string& propertyName,
-                       const std::string& propertyValue, bool appendAsString,
+                       std::set<std::string> const& names,
+                       std::string const& propertyName,
+                       std::string const& propertyValue, bool appendAsString,
                        bool appendMode, bool remove)
 {
   cmake* cm = status.GetMakefile().GetCMakeInstance();
@@ -782,8 +876,8 @@ bool HandleInstallMode(cmExecutionStatus& status,
 }
 
 bool HandleInstall(cmInstalledFile* file, cmMakefile& makefile,
-                   const std::string& propertyName,
-                   const std::string& propertyValue, bool appendAsString,
+                   std::string const& propertyName,
+                   std::string const& propertyValue, bool appendAsString,
                    bool appendMode, bool remove)
 {
   // Set or append the property.

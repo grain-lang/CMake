@@ -1,5 +1,5 @@
 /* Distributed under the OSI-approved BSD 3-Clause License.  See accompanying
-   file Copyright.txt or https://cmake.org/licensing for details.  */
+   file LICENSE.rst or https://cmake.org/licensing for details.  */
 #include "cmVSSetupHelper.h"
 
 #include <utility>
@@ -63,15 +63,16 @@ const WCHAR* ComponentType = L"Component";
 bool LoadVSInstanceVCToolsetVersion(VSInstanceInfo& vsInstanceInfo)
 {
   std::string const vcRoot = vsInstanceInfo.GetInstallLocation();
-  std::string vcToolsVersionFile =
-    vcRoot + "/VC/Auxiliary/Build/Microsoft.VCToolsVersion.default.txt";
+  std::string vcToolsVersionFile = cmStrCat(
+    vcRoot, "/VC/Auxiliary/Build/Microsoft.VCToolsVersion.default.txt");
   std::string vcToolsVersion;
   cmsys::ifstream fin(vcToolsVersionFile.c_str());
   if (!fin || !cmSystemTools::GetLineFromStream(fin, vcToolsVersion)) {
     return false;
   }
   vcToolsVersion = cmTrimWhitespace(vcToolsVersion);
-  std::string const vcToolsDir = vcRoot + "/VC/Tools/MSVC/" + vcToolsVersion;
+  std::string const vcToolsDir =
+    cmStrCat(vcRoot, "/VC/Tools/MSVC/", vcToolsVersion);
   if (!cmSystemTools::FileIsDirectory(vcToolsDir)) {
     return false;
   }
@@ -177,7 +178,7 @@ bool cmVSSetupAPIHelper::CheckInstalledComponent(
 bool cmVSSetupAPIHelper::GetVSInstanceInfo(
   SmartCOMPtr<ISetupInstance2> pInstance, VSInstanceInfo& vsInstanceInfo)
 {
-  if (pInstance == nullptr) {
+  if (!pInstance) {
     return false;
   }
 
@@ -218,8 +219,7 @@ bool cmVSSetupAPIHelper::GetVSInstanceInfo(
     }
 
     LPSAFEARRAY lpsaPackages;
-    if (FAILED(pInstance->GetPackages(&lpsaPackages)) ||
-        lpsaPackages == nullptr) {
+    if (FAILED(pInstance->GetPackages(&lpsaPackages)) || !lpsaPackages) {
       return false;
     }
 
@@ -231,7 +231,7 @@ bool cmVSSetupAPIHelper::GetVSInstanceInfo(
       SmartCOMPtr<ISetupPackageReference> package = nullptr;
       if (FAILED(ppData[i]->QueryInterface(IID_ISetupPackageReference,
                                            (void**)&package)) ||
-          package == nullptr) {
+          !package) {
         continue;
       }
 
@@ -306,8 +306,8 @@ namespace {
 std::string FindVsWhereCommand()
 {
   std::string vswhere;
-  static const char* programFiles[] = { "ProgramFiles(x86)", "ProgramFiles" };
-  for (const char* pf : programFiles) {
+  static char const* programFiles[] = { "ProgramFiles(x86)", "ProgramFiles" };
+  for (char const* pf : programFiles) {
     if (cmSystemTools::GetEnv(pf, vswhere)) {
       vswhere += "/Microsoft Visual Studio/Installer/vswhere.exe";
       if (cmSystemTools::FileExists(vswhere)) {
@@ -350,7 +350,7 @@ bool cmVSSetupAPIHelper::EnumerateVSInstancesWithVswhere(
     return false;
   }
 
-  for (const auto& item : json) {
+  for (auto const& item : json) {
     VSInstanceInfo instance;
     instance.Version = item["installationVersion"].asString();
     instance.VSInstallLocation = item["installationPath"].asString();
@@ -371,8 +371,7 @@ bool cmVSSetupAPIHelper::EnumerateVSInstancesWithVswhere(
 bool cmVSSetupAPIHelper::EnumerateVSInstancesWithCOM(
   std::vector<VSInstanceInfo>& VSInstances)
 {
-  if (initializationFailure || setupConfig == nullptr ||
-      setupConfig2 == nullptr || setupHelper == nullptr) {
+  if (initializationFailure || !setupConfig || !setupConfig2 || !setupHelper) {
     return false;
   }
 
@@ -434,14 +433,11 @@ bool cmVSSetupAPIHelper::EnumerateAndChooseVSInstance()
 
   std::string envVSCommonToolsDir;
   std::string envVSCommonToolsDirEnvName =
-    "VS" + std::to_string(this->Version) + "0COMNTOOLS";
+    cmStrCat("VS", this->Version, "0COMNTOOLS");
 
-  if (cmSystemTools::GetEnv(envVSCommonToolsDirEnvName.c_str(),
-                            envVSCommonToolsDir)) {
+  if (cmSystemTools::GetEnv(envVSCommonToolsDirEnvName, envVSCommonToolsDir)) {
     cmSystemTools::ConvertToUnixSlashes(envVSCommonToolsDir);
   }
-
-  std::string const wantVersion = std::to_string(this->Version) + '.';
 
   bool specifiedLocationNotSpecifiedVersion = false;
 
@@ -451,12 +447,15 @@ bool cmVSSetupAPIHelper::EnumerateAndChooseVSInstance()
 
   // Enumerate VS instances with either COM interface or Vswhere
   if (!EnumerateVSInstancesWithCOM(vecVSInstancesAll) &&
-      !EnumerateVSInstancesWithVswhere(vecVSInstancesAll)) {
+      !EnumerateVSInstancesWithVswhere(vecVSInstancesAll) &&
+      this->SpecifiedVSInstallLocation.empty()) {
     return false;
   }
 
+  std::string const wantVersion = cmStrCat(this->Version, '.');
+
   std::vector<VSInstanceInfo> vecVSInstances;
-  for (const auto& instanceInfo : vecVSInstancesAll) {
+  for (auto const& instanceInfo : vecVSInstancesAll) {
     // We are looking for a specific major version.
     if (instanceInfo.Version.size() < wantVersion.size() ||
         instanceInfo.Version.substr(0, wantVersion.size()) != wantVersion) {
@@ -515,7 +514,7 @@ bool cmVSSetupAPIHelper::EnumerateAndChooseVSInstance()
 }
 
 int cmVSSetupAPIHelper::ChooseVSInstance(
-  const std::vector<VSInstanceInfo>& vecVSInstances)
+  std::vector<VSInstanceInfo> const& vecVSInstances)
 {
   if (vecVSInstances.empty()) {
     return -1;
@@ -609,21 +608,21 @@ bool cmVSSetupAPIHelper::Initialize()
   if (FAILED(setupConfig.CoCreateInstance(CLSID_SetupConfiguration, nullptr,
                                           IID_ISetupConfiguration,
                                           CLSCTX_INPROC_SERVER)) ||
-      setupConfig == nullptr) {
+      !setupConfig) {
     initializationFailure = true;
     return false;
   }
 
   if (FAILED(setupConfig.QueryInterface(IID_ISetupConfiguration2,
                                         (void**)&setupConfig2)) ||
-      setupConfig2 == nullptr) {
+      !setupConfig2) {
     initializationFailure = true;
     return false;
   }
 
   if (FAILED(
         setupConfig.QueryInterface(IID_ISetupHelper, (void**)&setupHelper)) ||
-      setupHelper == nullptr) {
+      !setupHelper) {
     initializationFailure = true;
     return false;
   }
